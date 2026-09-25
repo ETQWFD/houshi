@@ -1,5 +1,5 @@
 // ==================== globals & types (part0) ====================
-enum GameState{ GAME_MENU, GAME_PLAY, GAME_PAUSE, GAME_DEAD };
+enum GameState{ GAME_MENU, GAME_GENERATING, GAME_PLAY, GAME_PAUSE, GAME_DEAD };
 enum CamMode{ CM_FP=0, CM_TP, CM_GOD };
 struct InvItem{ int id; int cnt; };
 struct AABB{ Vec3 mn,mx; };
