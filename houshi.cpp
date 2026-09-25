@@ -389,6 +389,17 @@ static Mesh MakeSphere(float r,int s,int t){
     Mesh m; BuildMesh(m,v,idx,8); return m;
 }
 static void DrawMesh(const Mesh&m){ glBindVertexArray(m.vao); glDrawElements(GL_TRIANGLES,m.count,GL_UNSIGNED_INT,0); }
+// UI quads: pos3 + uv2 per vertex (5 floats), only attrib 0/1 enabled — correct layout for progUI
+static void BuildMesh2D(Mesh&m,const vector<float>&v,const vector<unsigned int>&idx){
+    glGenVertexArrays(1,&m.vao); glBindVertexArray(m.vao);
+    glGenBuffers(1,&m.vbo); glBindBuffer(GL_ARRAY_BUFFER,m.vbo);
+    glBufferData(GL_ARRAY_BUFFER,v.size()*sizeof(float),&v[0],GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,5*sizeof(float),0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,5*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+    glGenBuffers(1,&m.ebo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,m.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*sizeof(unsigned int),&idx[0],GL_STATIC_DRAW);
+    m.count=(int)idx.size(); m.indexed=true;
+}
 
 static Mesh meshBox,meshCyl,meshSphere,meshBottle,meshCap,meshMeat,meshBook,meshFlashB,meshFlashH,meshAKM;
 static void MakeBaseMeshes(){
@@ -396,10 +407,10 @@ static void MakeBaseMeshes(){
     meshCyl=MakeCyl(0.5f,1.0f,14);
     meshSphere=MakeSphere(0.5f,14,8);
     meshQuad=M0();
-    { float v[4*8]={0,0,0, 0,0,1, 1,0,0, 1,0,1, 1,1,0, 1,1,1, 0,1,0, 0,1,1};
+    { float v[4*5]={0,0,0, 0,0, 1,0,0, 1,0, 1,1,0, 1,1, 0,1,0, 0,1};
       unsigned int idx[6]={0,1,2,0,2,3};
-      vector<float> vv(v,v+32); vector<unsigned int> ii(idx,idx+6);
-      BuildMesh(meshQuad,vv,ii,4); }
+      vector<float> vv(v,v+20); vector<unsigned int> ii(idx,idx+6);
+      BuildMesh2D(meshQuad,vv,ii); }
     meshBottle=MakeCyl(0.06f,0.24f,10);
     meshCap=MakeCyl(0.045f,0.06f,10);
     meshMeat=MakeBox(0.11f,0.09f,0.09f);
@@ -545,7 +556,7 @@ static void BuildChunk(int cx,int cz){
         GeoQuad(gf,Vec3(x0,ROOMH,z0+CELLSZ),Vec3(x0+CELLSZ,ROOMH,z0+CELLSZ),Vec3(x0+CELLSZ,ROOMH,z0),Vec3(x0,ROOMH,z0),Vec3(0,-1,0),gi*2.0f,gj*2.0f,(gi+1)*2.0f,(gj+1)*2.0f);
         ch.panels.push_back(Vec3(x0+CELLSZ/2,ROOMH-0.06f,z0+CELLSZ/2));
         float pw=3.2f;
-        Vec3 pc(x0+CELLSZ/2,ROOMH-0.03f,z0+CELLSZ/2);
+        Vec3 pc(x0+CELLSZ/2,ROOMH-0.12f,z0+CELLSZ/2);
         GeoQuad(gp,Vec3(pc.x-pw,pc.y,pc.z-pw*0.5f),Vec3(pc.x+pw,pc.y,pc.z-pw*0.5f),Vec3(pc.x+pw,pc.y,pc.z+pw*0.5f),Vec3(pc.x-pw,pc.y,pc.z+pw*0.5f),Vec3(0,-1,0),0,0,1,1);
         if(solid){
             bool broken=Hash01(gi*3+1,gj*7+2)>0.90f;
@@ -574,9 +585,9 @@ static void UpdateChunks(){
     }
     for(auto it=g_chunks.begin();it!=g_chunks.end();){
         if(abs(it->second.cx-pcx)>R+2||abs(it->second.cz-pcz)>R+2){
-            if(it->second.meshWall.vao) glDeleteVertexArrays(1,&it->second.meshWall.vao);
-            if(it->second.meshFC.vao) glDeleteVertexArrays(1,&it->second.meshFC.vao);
-            if(it->second.meshPanel.vao) glDeleteVertexArrays(1,&it->second.meshPanel.vao);
+            if(it->second.meshWall.vao){ glDeleteVertexArrays(1,&it->second.meshWall.vao); glDeleteBuffers(2,&it->second.meshWall.vbo); }
+            if(it->second.meshFC.vao){ glDeleteVertexArrays(1,&it->second.meshFC.vao); glDeleteBuffers(2,&it->second.meshFC.vbo); }
+            if(it->second.meshPanel.vao){ glDeleteVertexArrays(1,&it->second.meshPanel.vao); glDeleteBuffers(2,&it->second.meshPanel.vbo); }
             it=g_chunks.erase(it);
         } else ++it;
     }
@@ -1523,11 +1534,13 @@ static void GatherLights(){
         const Chunk&ch=it->second;
         for(size_t i=0;i<ch.panels.size();i++){
             Vec3 p=ch.panels[i];
-            float d=(p-g_camPos).len();
-            if(d<45.0f) cand.push_back(p);
+            Vec3 dv=p-g_camPos;
+            if(dv.dot(dv)<45.0f*45.0f) cand.push_back(p);
         }
     }
-    // simple sort by distance (insertion for first 8)
+    // nearest 8 fluorescent lights by distance (stable, no jumpy pick)
+    std::sort(cand.begin(),cand.end(),[&](const Vec3&a,const Vec3&b){
+        Vec3 da=a-g_camPos, db=b-g_camPos; return da.dot(da)<db.dot(db); });
     for(size_t i=0;i<cand.size()&&g_lightsN<8;i++){
         Vec3 p=cand[i];
         float d=(p-g_camPos).len();
@@ -1623,11 +1636,13 @@ static void DrawChunks(const Mat4&vp){
         Chunk&ch=it->second;
         if(ch.meshFC.vao){ SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texFloor,Vec3(1,1,1)); DrawMesh(ch.meshFC); }
         if(ch.meshWall.vao){ SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texWall,Vec3(1,1,1)); DrawMesh(ch.meshWall); }
-        // panels: bright emissive
+        // panels: bright emissive (polygon offset avoids z-fight flicker vs ceiling)
         if(ch.meshPanel.vao){
             glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE);
+            glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(-1.0f,-1.0f);
             SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texPanel,Vec3(2.2f,2.3f,2.5f));
             DrawMesh(ch.meshPanel);
+            glDisable(GL_POLYGON_OFFSET_FILL);
             glDisable(GL_BLEND);
         }
     }
@@ -2052,7 +2067,7 @@ static void DrawHUD(){
 
 // ==================== frame ====================
 static void RenderFrame(){
-    Mat4 proj=M4Persp(70.0f*PI/180.0f,(float)g_W/(float)g_H,0.1f,400.0f);
+    Mat4 proj=M4Persp(70.0f*PI/180.0f,(float)g_W/(float)g_H,0.1f,120.0f);
     Vec3 camPos,fwd;
     if(g_cam==CM_FP){
         camPos=g_pos+Vec3(0,1.55f+sinf(g_walkT*2.2f)*0.012f,0);
@@ -2235,6 +2250,13 @@ static bool CreateGLWindow(){
 }
 
 // ==================== main ====================
+static void RenderLoadingFrames(int n){
+    for(int i=0;i<n;i++){
+        MSG m2; while(PeekMessageW(&m2,NULL,0,0,PM_REMOVE)){ TranslateMessage(&m2); DispatchMessageW(&m2); }
+        DrawLoadingFrame();
+        Sleep(200);
+    }
+}
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
@@ -2245,11 +2267,15 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     RECT rc; GetClientRect(g_hWnd,&rc); g_W=rc.right; g_H=rc.bottom;
     glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glCullFace(GL_BACK);
     glClearColor(0.03f,0.03f,0.04f,1);
-    CompilePrograms();
+    // loading frames need these two ready
     { Canvas c(8,8); CanvasFillRect(c,0,0,8,8,255,255,255); g_texWhite=c.Upload(); }
     MakeBaseMeshes();
+    g_loadText=L"正在初始化 OpenGL 渲染器 ..."; RenderLoadingFrames(1);
+    CompilePrograms();
+    g_loadText=L"正在编译着色器 (OpenGL 3.3) ..."; RenderLoadingFrames(2);
     MakeAllTextures();
     MakeShadowFBO();
+    g_loadText=L"正在生成世界与音效 ..."; RenderLoadingFrames(2);
     GenSounds();
     g_inv.assign(40,InvItem{0,0});
     g_inv[0].id=3; g_inv[0].cnt=1;
