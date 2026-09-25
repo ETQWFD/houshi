@@ -266,7 +266,7 @@ static float Noise1(float x){
 
 
 // ==================== globals & types (part0) ====================
-enum GameState{ GAME_MENU, GAME_PLAY, GAME_PAUSE, GAME_DEAD };
+enum GameState{ GAME_MENU, GAME_GENERATING, GAME_PLAY, GAME_PAUSE, GAME_DEAD };
 enum CamMode{ CM_FP=0, CM_TP, CM_GOD };
 struct InvItem{ int id; int cnt; };
 struct AABB{ Vec3 mn,mx; };
@@ -1086,6 +1086,7 @@ static void DropToWorld(int id,int cnt){
 static bool KeyDn(int v){ if(simKey[v]) return true; return (GetAsyncKeyState(v)&0x8000)!=0; }
 static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0,g_prevUp=0,g_prevDown=0,g_prevEnter=0;
 static bool g_prevL=false,g_prevRbtn=false;
+static bool g_mouseLock=false;
 
 // ==================== chat command ====================
 static void RunCommand(const wstring&cmd){
@@ -1187,6 +1188,29 @@ static bool LoadGame(){
 // ==================== update ====================
 static void UpdateGame(float dt){
     g_time+=dt; g_dt=dt;
+    // ---- mouse look (captured cursor, first/third person) ----
+    bool wantLock=(g_gamestate==GAME_PLAY&&!g_invOpen&&!g_chatOpen&&!g_dead&&g_cam!=CM_GOD);
+    if(wantLock&&!g_mouseLock){
+        g_mouseLock=true; ShowCursor(FALSE);
+        RECT rc; GetClientRect(g_hWnd,&rc); POINT c={rc.right/2,rc.bottom/2};
+        ClientToScreen(g_hWnd,&c); SetCursorPos(c.x,c.y);
+    } else if(!wantLock&&g_mouseLock){
+        g_mouseLock=false; ShowCursor(TRUE);
+    }
+    if(g_mouseLock){
+        POINT p; GetCursorPos(&p);
+        RECT rc; GetClientRect(g_hWnd,&rc); POINT c={rc.right/2,rc.bottom/2};
+        ClientToScreen(g_hWnd,&c);
+        int dx=p.x-c.x, dy=p.y-c.y;
+        if(dx||dy){
+            const float sens=0.0022f;
+            g_yaw-=dx*sens;
+            g_pitch+=dy*sens;
+            if(g_pitch>1.5f) g_pitch=1.5f;
+            if(g_pitch<-1.5f) g_pitch=-1.5f;
+            SetCursorPos(c.x,c.y);
+        }
+    }
     for(size_t i=0;i<g_views.size();i++) g_views[i].t-=dt;
     for(size_t i=0;i<g_views.size();) { if(g_views[i].t<=0) g_views.erase(g_views.begin()+i); else i++; }
     if(g_textCache.size()>500) g_textCache.clear();
@@ -1352,7 +1376,8 @@ static void UpdateMenu(float dt){
                 g_inv[3].id=2; g_inv[3].cnt=2;
                 SpawnWorld();
                 g_chunks.clear();
-                g_gamestate=GAME_PLAY;
+                g_gamestate=GAME_GENERATING;
+                g_loadText=L"正在生成无限迷宫 ...";
                 g_cam=CM_FP;
                 AddMsg(L"欢迎来到《后世》。你被困在了无限迷宫中。");
                 AddMsg(L"WASD移动 空格跳 Shift疾跑 E背包 数字键切换物品 F手电 F5视角 T聊天");
@@ -1360,7 +1385,9 @@ static void UpdateMenu(float dt){
             } else if(g_menuSel==1){ // continue
                 if(LoadGame()){
                     g_chunks.clear();
-                    g_gamestate=GAME_PLAY; g_dead=false; g_cam=CM_FP;
+                    g_gamestate=GAME_GENERATING;
+                    g_loadText=L"正在载入存档世界 ...";
+                    g_dead=false; g_cam=CM_FP;
                     AddMsg(L"已读取存档，欢迎回到《后世》");
                 } else AddMsg(L"没有找到存档！请先创建新游戏");
             } else { // quit
@@ -2282,8 +2309,8 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_inv[1].id=4; g_inv[1].cnt=1;
     g_inv[2].id=1; g_inv[2].cnt=2;
     g_inv[3].id=2; g_inv[3].cnt=2;
-    g_pos=SpawnPos();
-    UpdateChunks();
+    // world is generated only when the player clicks "开始新游戏"/"继续游戏"
+    g_pos=Vec3(0,1.7f,0);
     g_gamestate=GAME_MENU;
     LoadAutoTest();
     MSG msg; memset(&msg,0,sizeof(msg));
@@ -2300,7 +2327,13 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
         float dt=(float)dtf;
         g_fps=g_fps*0.95f+((float)(1.0/(dtf>0.0001?dtf:0.0001)))*0.05f;
         UpdateAutoTest(dt);
-        if(g_gamestate==GAME_PLAY) UpdateGame(dt);
+        if(g_gamestate==GAME_GENERATING){
+            // show "generating world" progress, then build the random maze once
+            RenderLoadingFrames(2);
+            UpdateChunks();
+            g_gamestate=GAME_PLAY;
+        }
+        else if(g_gamestate==GAME_PLAY) UpdateGame(dt);
         else UpdateMenu(dt);
         if(g_gamestate==GAME_PLAY) UpdateChunks();
         NetUpdate(dt);
