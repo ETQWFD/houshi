@@ -174,8 +174,8 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_inv[1].id=4; g_inv[1].cnt=1;
     g_inv[2].id=1; g_inv[2].cnt=2;
     g_inv[3].id=2; g_inv[3].cnt=2;
-    g_pos=SpawnPos();
-    UpdateChunks();
+    // world is generated only when the player clicks "开始新游戏"/"继续游戏"
+    g_pos=Vec3(0,1.7f,0);
     g_gamestate=GAME_MENU;
     AutoLoad();
     MSG msg; memset(&msg,0,sizeof(msg));
@@ -192,7 +192,13 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
         float dt=(float)dtf;
         g_fps=g_fps*0.95f+((float)(1.0/(dtf>0.0001?dtf:0.0001)))*0.05f;
         AutoUpdate(dt);
-        if(g_gamestate==GAME_PLAY) UpdateGame(dt);
+        if(g_gamestate==GAME_GENERATING){
+            // show "generating world" progress, then build the random maze once
+            RenderLoadingFrames(2);
+            UpdateChunks();
+            g_gamestate=GAME_PLAY;
+        }
+        else if(g_gamestate==GAME_PLAY) UpdateGame(dt);
         else UpdateMenu(dt);
         if(g_gamestate==GAME_PLAY) UpdateChunks();
         NetUpdate(dt);
