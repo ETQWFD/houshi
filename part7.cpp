@@ -157,7 +157,7 @@ static void DrawHUD(){
 
 // ==================== frame ====================
 static void RenderFrame(){
-    Mat4 proj=M4Persp(70.0f*PI/180.0f,(float)g_W/(float)g_H,0.1f,400.0f);
+    Mat4 proj=M4Persp(70.0f*PI/180.0f,(float)g_W/(float)g_H,0.1f,120.0f);
     Vec3 camPos,fwd;
     if(g_cam==CM_FP){
         camPos=g_pos+Vec3(0,1.55f+sinf(g_walkT*2.2f)*0.012f,0);
