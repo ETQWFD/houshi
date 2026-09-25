@@ -143,11 +143,13 @@ static void GatherLights(){
         const Chunk&ch=it->second;
         for(size_t i=0;i<ch.panels.size();i++){
             Vec3 p=ch.panels[i];
-            float d=(p-g_camPos).len();
-            if(d<45.0f) cand.push_back(p);
+            Vec3 dv=p-g_camPos;
+            if(dv.dot(dv)<45.0f*45.0f) cand.push_back(p);
         }
     }
-    // simple sort by distance (insertion for first 8)
+    // nearest 8 fluorescent lights by distance (stable, no jumpy pick)
+    std::sort(cand.begin(),cand.end(),[&](const Vec3&a,const Vec3&b){
+        Vec3 da=a-g_camPos, db=b-g_camPos; return da.dot(da)<db.dot(db); });
     for(size_t i=0;i<cand.size()&&g_lightsN<8;i++){
         Vec3 p=cand[i];
         float d=(p-g_camPos).len();
@@ -244,11 +246,13 @@ static void DrawChunks(const Mat4&vp){
         Chunk&ch=it->second;
         if(ch.meshFC.vao){ SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texFloor,Vec3(1,1,1)); DrawMesh(ch.meshFC); }
         if(ch.meshWall.vao){ SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texWall,Vec3(1,1,1)); DrawMesh(ch.meshWall); }
-        // panels: bright emissive
+        // panels: bright emissive (polygon offset avoids z-fight flicker vs ceiling)
         if(ch.meshPanel.vao){
             glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE);
+            glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(-1.0f,-1.0f);
             SetWorldUniforms(progW,vp,M4Id(),M4Id(),g_texPanel,Vec3(2.2f,2.3f,2.5f));
             DrawMesh(ch.meshPanel);
+            glDisable(GL_POLYGON_OFFSET_FILL);
             glDisable(GL_BLEND);
         }
     }
