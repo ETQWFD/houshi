@@ -350,6 +350,17 @@ static Mesh MakeSphere(float r,int s,int t){
     Mesh m; BuildMesh(m,v,idx,8); return m;
 }
 static void DrawMesh(const Mesh&m){ glBindVertexArray(m.vao); glDrawElements(GL_TRIANGLES,m.count,GL_UNSIGNED_INT,0); }
+// UI quads: pos3 + uv2 per vertex (5 floats), only attrib 0/1 enabled — correct layout for progUI
+static void BuildMesh2D(Mesh&m,const vector<float>&v,const vector<unsigned int>&idx){
+    glGenVertexArrays(1,&m.vao); glBindVertexArray(m.vao);
+    glGenBuffers(1,&m.vbo); glBindBuffer(GL_ARRAY_BUFFER,m.vbo);
+    glBufferData(GL_ARRAY_BUFFER,v.size()*sizeof(float),&v[0],GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,5*sizeof(float),0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,5*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+    glGenBuffers(1,&m.ebo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,m.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*sizeof(unsigned int),&idx[0],GL_STATIC_DRAW);
+    m.count=(int)idx.size(); m.indexed=true;
+}
 
 static Mesh meshBox,meshCyl,meshSphere,meshBottle,meshCap,meshMeat,meshBook,meshFlashB,meshFlashH,meshAKM;
 static void MakeBaseMeshes(){
@@ -357,10 +368,10 @@ static void MakeBaseMeshes(){
     meshCyl=MakeCyl(0.5f,1.0f,14);
     meshSphere=MakeSphere(0.5f,14,8);
     meshQuad=M0();
-    { float v[4*8]={0,0,0, 0,0,1, 1,0,0, 1,0,1, 1,1,0, 1,1,1, 0,1,0, 0,1,1};
+    { float v[4*5]={0,0,0, 0,0, 1,0,0, 1,0, 1,1,0, 1,1, 0,1,0, 0,1};
       unsigned int idx[6]={0,1,2,0,2,3};
-      vector<float> vv(v,v+32); vector<unsigned int> ii(idx,idx+6);
-      BuildMesh(meshQuad,vv,ii,4); }
+      vector<float> vv(v,v+20); vector<unsigned int> ii(idx,idx+6);
+      BuildMesh2D(meshQuad,vv,ii); }
     meshBottle=MakeCyl(0.06f,0.24f,10);
     meshCap=MakeCyl(0.045f,0.06f,10);
     meshMeat=MakeBox(0.11f,0.09f,0.09f);
