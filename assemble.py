@@ -117,7 +117,7 @@ new_build="""static void BuildChunk(int cx,int cz){
         GeoQuad(gf,Vec3(x0,ROOMH,z0+CELLSZ),Vec3(x0+CELLSZ,ROOMH,z0+CELLSZ),Vec3(x0+CELLSZ,ROOMH,z0),Vec3(x0,ROOMH,z0),Vec3(0,-1,0),gi*2.0f,gj*2.0f,(gi+1)*2.0f,(gj+1)*2.0f);
         ch.panels.push_back(Vec3(x0+CELLSZ/2,ROOMH-0.06f,z0+CELLSZ/2));
         float pw=3.2f;
-        Vec3 pc(x0+CELLSZ/2,ROOMH-0.03f,z0+CELLSZ/2);
+        Vec3 pc(x0+CELLSZ/2,ROOMH-0.12f,z0+CELLSZ/2);
         GeoQuad(gp,Vec3(pc.x-pw,pc.y,pc.z-pw*0.5f),Vec3(pc.x+pw,pc.y,pc.z-pw*0.5f),Vec3(pc.x+pw,pc.y,pc.z+pw*0.5f),Vec3(pc.x-pw,pc.y,pc.z+pw*0.5f),Vec3(0,-1,0),0,0,1,1);
         if(solid){
             bool broken=Hash01(gi*3+1,gj*7+2)>0.90f;
@@ -143,9 +143,9 @@ old_del="""        if(abs(it->second.cx-pcx)>R+2||abs(it->second.cz-pcz)>R+2){
             it=g_chunks.erase(it);
         } else ++it;"""
 new_del="""        if(abs(it->second.cx-pcx)>R+2||abs(it->second.cz-pcz)>R+2){
-            if(it->second.meshWall.vao) glDeleteVertexArrays(1,&it->second.meshWall.vao);
-            if(it->second.meshFC.vao) glDeleteVertexArrays(1,&it->second.meshFC.vao);
-            if(it->second.meshPanel.vao) glDeleteVertexArrays(1,&it->second.meshPanel.vao);
+            if(it->second.meshWall.vao){ glDeleteVertexArrays(1,&it->second.meshWall.vao); glDeleteBuffers(2,&it->second.meshWall.vbo); }
+            if(it->second.meshFC.vao){ glDeleteVertexArrays(1,&it->second.meshFC.vao); glDeleteBuffers(2,&it->second.meshFC.vbo); }
+            if(it->second.meshPanel.vao){ glDeleteVertexArrays(1,&it->second.meshPanel.vao); glDeleteBuffers(2,&it->second.meshPanel.vbo); }
             it=g_chunks.erase(it);
         } else ++it;"""
 assert old_del in p2
