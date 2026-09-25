@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后世 Afterlife — Backrooms 无限迷宫生存游戏</title>
+<link rel="icon" href="icon.ico" type="image/x-icon">
+<style>
+  :root{
+    --wall:#c6b67a; --floor:#5a5240; --lamp:#f6f7e8;
+    --bg:#0b0a08; --card:#15130e; --line:#2c281c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg); color:#d8d2c0;
+    font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7;
+  }
+  .bg{position:fixed;inset:0;z-index:-1;background:
+    linear-gradient(rgba(198,182,122,.06),rgba(198,182,122,.06)),
+    repeating-linear-gradient(90deg,transparent 0 9px,rgba(0,0,0,.35) 9px 10px),
+    repeating-linear-gradient(0deg,transparent 0 9px,rgba(0,0,0,.25) 9px 10px),
+    #0b0a08;}
+  header{
+    padding:72px 20px 40px; text-align:center;
+    border-bottom:1px solid #2c281c;
+    background:radial-gradient(ellipse at 50% -20%, rgba(198,182,122,.18), transparent 60%);
+  }
+  .logo{width:96px;height:96px;border-radius:16px;box-shadow:0 0 30px rgba(198,182,122,.25);}
+  h1{font-size:44px;letter-spacing:8px;color:var(--wall);margin:20px 0 6px;}
+  .sub{color:#8f8a78;letter-spacing:3px;}
+  main{max-width:960px;margin:0 auto;padding:36px 20px 80px;}
+  .dl{
+    text-align:center;margin:34px 0;
+  }
+  .btn{
+    display:inline-block;padding:16px 46px;font-size:20px;color:#0b0a08;
+    background:var(--wall);text-decoration:none;border-radius:8px;font-weight:700;
+    letter-spacing:2px;box-shadow:0 4px 24px rgba(198,182,122,.3);
+  }
+  .btn small{display:block;font-size:12px;font-weight:400;opacity:.8;}
+  .note{color:#7d7866;font-size:13px;margin-top:10px;}
+  h2{color:var(--wall);font-size:22px;margin:38px 0 14px;border-left:4px solid var(--wall);padding-left:12px;letter-spacing:2px;}
+  p{color:#c2bca8;margin:10px 0;}
+  ul{list-style:none;margin:8px 0;}
+  li{padding:6px 0 6px 26px;position:relative;color:#c2bca8;}
+  li::before{content:"▸";position:absolute;left:6px;color:var(--wall);}
+  table{width:100%;border-collapse:collapse;margin:12px 0;}
+  td,th{border:1px solid #2c281c;padding:8px 12px;font-size:14px;text-align:left;}
+  th{color:var(--wall);background:#15130e;}
+  code{background:#1a1712;border:1px solid #2c281c;padding:1px 6px;border-radius:4px;color:#e3d9ae;font-size:14px;}
+  .cmd{display:block;background:#1a1712;border:1px solid #2c281c;padding:14px;border-radius:8px;color:#e3d9ae;margin:12px 0;font-size:13px;overflow:auto;}
+  footer{text-align:center;color:#6b6654;padding:30px 20px 60px;border-top:1px solid #2c281c;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<header>
+  <img class="logo" src="icon.ico" alt="后世">
+  <h1>后 世</h1>
+  <div class="sub">AFTERLIFE · BACKROOMS 无限迷宫生存</div>
+</header>
+<main>
+  <div class="dl">
+    <a class="btn" href="后世.exe" download>下载 Windows 版<small>后世.exe · 约 0.9 MB · OpenGL 3.3</small></a>
+    <div class="note">绿色单文件运行 · 无需安装 · 支持存档 / 联机 / 聊天</div>
+  </div>
+
+  <h2>这是什么</h2>
+  <p>你被困在<b>后世</b>——发黄墙纸、潮湿地毯、荧光灯嗡鸣作响的<b>无限迷宫</b>。
+  没有出口，没有边界。寻找杏仁水恢复理智，警惕腐肉侵蚀精神，在黑暗与荧光之间活下去。</p>
+
+  <h2>核心特性</h2>
+  <ul>
+    <li>真实光影：荧光灯动态照明 + 手电筒实时软阴影（PCF）</li>
+    <li>真实物理：重力 / 跳跃 / 天花板；禁飞、禁穿墙（AABB 碰撞）</li>
+    <li>无限程序化迷宫：确定性哈希生成，无限延伸，F9 随时存档</li>
+    <li>人形建模：第一人称可见双手五指、双腿双脚；第三人称 / 上帝视角（F5 切换）</li>
+    <li>生存五维：生命 / 理智 / 饥饿 / 口渴 / 体力</li>
+    <li>永久背包：默认 40 格，E 开/关，左键拖放、右键使用、Q 丢弃；吃肉升级 +1 格</li>
+    <li>物品：银杏水（杏仁水）与腐肉，均有进食动作与音效</li>
+    <li>AKM 步枪：聊天框输入 <code>/giop @s akm</code> 发枪，射击 / 换弹 / 曳光 / 枪口火光</li>
+    <li>真联机：LAN 广播 + STUN 自动内网穿透，<code>/join IP:端口</code> 与好友同迷、同聊</li>
+  </ul>
+
+  <h2>操作</h2>
+  <table>
+    <tr><th>按键</th><th>功能</th></tr>
+    <tr><td>WASD / 鼠标</td><td>移动 / 视角</td></tr>
+    <tr><td>空格 · Shift</td><td>跳跃 · 疾跑（耗体力）</td></tr>
+    <tr><td>F · F5</td><td>手电筒开关 · 视角切换</td></tr>
+    <tr><td>E · 1~9 · Q</td><td>背包开关 · 快捷栏 · 选中/丢弃</td></tr>
+    <tr><td>左键 / 右键</td><td>拾取·射击 / 使用物品</td></tr>
+    <tr><td>T · R · ESC · F9</td><td>聊天 / 换弹 / 暂停菜单 / 存档</td></tr>
+  </table>
+
+  <h2>联机（自动内网穿透）</h2>
+  <ul>
+    <li>双方进入游戏后，查看自己的联机码（自动 STUN 探测公网 IP:端口）</li>
+    <li>一方在聊天框输入 <code>/join 对方的公网IP:端口</code></li>
+    <li>自动互相打洞建立直连，即可同屏游玩 + 聊天</li>
+  </ul>
+
+  <h2>构建</h2>
+  <p>Windows 下需要 MinGW-w64（llvm-mingw 或 mingw-w64）：</p>
+  <pre class="cmd">x86_64-w64-mingw32-windres -i resource.rc -o resource.o --input-format=rc --output-format=coff -I.
+x86_64-w64-mingw32-g++ -O2 -std=c++17 -static -o 后世.exe houshi.cpp resource.o \
+    -lopengl32 -lgdi32 -luser32 -lwinmm -lws2_32 -mwindows</pre>
+  <p>仓库内附 <code>assemble.py</code>（重组 part0~part8 源码）、<code>linux_test.cpp</code>（逻辑回归测试 9/9 PASS）。</p>
+</main>
+<footer>后世 Afterlife · 学习与娱乐用途 · 全部贴图音效程序化生成，无第三方素材</footer>
+</body>
+</html>
