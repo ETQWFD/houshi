@@ -142,6 +142,13 @@ static bool CreateGLWindow(){
 }
 
 // ==================== main ====================
+static void RenderLoadingFrames(int n){
+    for(int i=0;i<n;i++){
+        MSG m2; while(PeekMessageW(&m2,NULL,0,0,PM_REMOVE)){ TranslateMessage(&m2); DispatchMessageW(&m2); }
+        DrawLoadingFrame();
+        Sleep(200);
+    }
+}
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
@@ -152,11 +159,15 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     RECT rc; GetClientRect(g_hWnd,&rc); g_W=rc.right; g_H=rc.bottom;
     glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glCullFace(GL_BACK);
     glClearColor(0.03f,0.03f,0.04f,1);
-    CompilePrograms();
+    // loading frames need these two ready
     { Canvas c(8,8); CanvasFillRect(c,0,0,8,8,255,255,255); g_texWhite=c.Upload(); }
     MakeBaseMeshes();
+    g_loadText=L"正在初始化 OpenGL 渲染器 ..."; RenderLoadingFrames(1);
+    CompilePrograms();
+    g_loadText=L"正在编译着色器 (OpenGL 3.3) ..."; RenderLoadingFrames(2);
     MakeAllTextures();
     MakeShadowFBO();
+    g_loadText=L"正在生成世界与音效 ..."; RenderLoadingFrames(2);
     GenSounds();
     g_inv.assign(40,InvItem{0,0});
     g_inv[0].id=3; g_inv[0].cnt=1;
