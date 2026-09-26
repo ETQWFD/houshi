@@ -291,6 +291,9 @@ static int g_ammo=30; static float g_reloadT=0;
 static float g_time=0,g_dt=0,g_fps=0,g_walkT=0,g_stepT=0;
 static float g_eatAnim=0,g_drinkAnim=0;
 static int g_menuSel=0,g_pauseSel=0;
+static int g_menuPage=0;              // 0=main,1=single,2=multi
+static bool g_multiplayer=false;      // entered via 多人游戏
+static wstring g_pendingJoin;         // IP:port to join after world generated
 static wstring g_playerName=L"幸存者",g_nameBuf,g_chatBuf;
 static vector<wstring> g_msgs,g_chatLog;
 static vector<MsgT> g_views;
@@ -457,7 +460,7 @@ struct TextTex{ GLuint tex; int w,h; };
 static map<wstring,TextTex> g_textCache;
 static TextTex MakeTextTex(const wstring& s,int px){
     TextTex t; t.w=0;t.h=0;t.tex=0; if(s.empty()) return t;
-    const wchar_t* fonts[]={L"Microsoft YaHei",L"WenQuanYi Zen Hei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
+    const wchar_t* fonts[]={L"WenQuanYi Zen Hei",L"Microsoft YaHei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
     HDC dc=CreateCompatibleDC(NULL);
     int best=-1; vector<unsigned char> bestBits; int bw=0,bh=0;
     for(int fi=0;fi<7;fi++){
@@ -1076,9 +1079,18 @@ static void TryPickup(){
 }
 static void DropToWorld(int id,int cnt){
     Vec3 f(-sinf(g_yaw)*cosf(g_pitch),sinf(g_pitch),-cosf(g_yaw)*cosf(g_pitch));
-    WorldItem it; it.type=id; it.pos=g_pos+Vec3(0,1.0f,0)+f*1.2f; it.rot=g_time; it.taken=false;
+    // drop on floor in front of player, avoiding walls
+    Vec3 p=g_pos+Vec3(0,1.0f,0);
+    for(float d=0.6f;d<=3.0f;d+=0.3f){
+        Vec3 q=p+f*d;
+        int gi=(int)floorf(q.x/CELLSZ), gj=(int)floorf(q.z/CELLSZ);
+        if(!CellSolid(gi,gj)){ p=q; break; }
+    }
+    WorldItem it; it.type=id;
+    it.pos=Vec3(p.x,MaxF(FloorAt(p.x,p.z)+0.12f,0.2f),p.z); it.rot=g_time; it.taken=false;
     g_items.push_back(it);
     Sfx(L"sfx_drop.wav");
+    AddMsg(L"已丢弃 "+ItemName(id));
     (void)cnt;
 }
 
@@ -1352,6 +1364,31 @@ static void UpdateGame(float dt){
     }
 }
 // menu update (menu/pause/dead): arrow select + enter
+static void StartNewGame(bool multi){
+    if(g_nameBuf.empty()) g_nameBuf=L"幸存者";
+    g_playerName=g_nameBuf; g_nameBuf.clear();
+    g_seed=(int)(GetTickCount()^1234567);
+    g_wr=g_seed*7919u+77u;
+    g_hp=100;g_san=100;g_hun=100;g_thr=100;g_sta=100;g_xp=0;
+    g_level=1; g_capacity=40; g_ammo=30; g_flashOn=true;
+    g_pos=SpawnPos(); g_yaw=0; g_pitch=0; g_velY=0; g_onGround=true; g_dead=false;
+    g_inv.assign(g_capacity,InvItem{0,0});
+    g_inv[0].id=3; g_inv[0].cnt=1;
+    g_inv[1].id=4; g_inv[1].cnt=1;
+    g_inv[2].id=1; g_inv[2].cnt=2;
+    g_inv[3].id=2; g_inv[3].cnt=2;
+    SpawnWorld();
+    g_chunks.clear();
+    g_multiplayer=multi;
+    g_pendingJoin.clear();
+    g_gamestate=GAME_GENERATING;
+    g_loadText=multi?L"正在生成多人世界 ...":L"正在生成无限迷宫 ...";
+    g_cam=CM_FP;
+    if(multi){ g_broadcastOn=true; AddMsg(L"多人模式已开启广播，好友可用 /join 你的联机码加入"); }
+    AddMsg(L"欢迎来到《后世》。你被困在了无限迷宫中。");
+    AddMsg(L"WASD移动 空格跳 Shift疾跑 E背包 数字键切换物品 F手电 F5视角 T聊天");
+    AddMsg(L"指令: /giop @s akm 获得步枪  /join IP:端口 联机");
+}
 static void UpdateMenu(float dt){
     g_dt=dt;
     if(g_textCache.size()>500) g_textCache.clear();
@@ -1361,41 +1398,32 @@ static void UpdateMenu(float dt){
     if(KeyDn(VK_RETURN)&&!g_prevEnter){
         g_prevEnter=1;
         if(g_gamestate==GAME_MENU){
-            if(g_menuSel==0){ // new game
-                if(g_nameBuf.empty()) g_nameBuf=L"幸存者";
-                g_playerName=g_nameBuf;
-                g_seed=(int)(GetTickCount()^1234567);
-                g_wr=g_seed*7919u+77u;
-                g_hp=100;g_san=100;g_hun=100;g_thr=100;g_sta=100;g_xp=0;
-                g_level=1; g_capacity=40; g_ammo=30; g_flashOn=true;
-                g_pos=SpawnPos(); g_yaw=0; g_pitch=0; g_velY=0; g_onGround=true; g_dead=false;
-                g_inv.assign(g_capacity,InvItem{0,0});
-                g_inv[0].id=3; g_inv[0].cnt=1;
-                g_inv[1].id=4; g_inv[1].cnt=1;
-                g_inv[2].id=1; g_inv[2].cnt=2;
-                g_inv[3].id=2; g_inv[3].cnt=2;
-                SpawnWorld();
-                g_chunks.clear();
-                g_gamestate=GAME_GENERATING;
-                g_loadText=L"正在生成无限迷宫 ...";
-                g_cam=CM_FP;
-                AddMsg(L"欢迎来到《后世》。你被困在了无限迷宫中。");
-                AddMsg(L"WASD移动 空格跳 Shift疾跑 E背包 数字键切换物品 F手电 F5视角 T聊天");
-                AddMsg(L"指令: /giop @s akm 获得步枪  /join IP:端口 联机");
-            } else if(g_menuSel==1){ // continue
-                if(LoadGame()){
-                    g_chunks.clear();
-                    g_gamestate=GAME_GENERATING;
-                    g_loadText=L"正在载入存档世界 ...";
-                    g_dead=false; g_cam=CM_FP;
-                    AddMsg(L"已读取存档，欢迎回到《后世》");
-                } else AddMsg(L"没有找到存档！请先创建新游戏");
-            } else { // quit
-                SaveGame(); PostQuitMessage(0);
+            if(g_menuPage==0){
+                if(g_menuSel==0){ g_menuPage=1; g_menuSel=0; Sfx(L"sfx_click.wav"); }        // 单人游戏
+                else if(g_menuSel==1){ g_menuPage=2; g_menuSel=0; Sfx(L"sfx_click.wav"); }    // 多人游戏
+                else { SaveGame(); PostQuitMessage(0); }
+            } else if(g_menuPage==1){
+                if(g_menuSel==0){ StartNewGame(false); }          // 开始新游戏（单人）
+                else if(g_menuSel==1){                            // 继续游戏
+                    if(LoadGame()){
+                        g_chunks.clear();
+                        g_gamestate=GAME_GENERATING;
+                        g_loadText=L"正在载入存档世界 ...";
+                        g_dead=false; g_cam=CM_FP; g_multiplayer=false;
+                        AddMsg(L"已读取存档，欢迎回到《后世》");
+                    } else AddMsg(L"没有找到存档！请先创建新游戏");
+                } else { g_menuPage=0; g_menuSel=0; g_nameBuf.clear(); }
+            } else {                                              // 多人子菜单
+                if(g_menuSel==0){ StartNewGame(true); }           // 开始新游戏（多人）
+                else if(g_menuSel==1){                            // 加入联机（输入 IP:端口）
+                    wstring ip=g_nameBuf; g_nameBuf.clear();
+                    if(!ip.empty()){ StartNewGame(true); g_pendingJoin=ip; }
+                    else AddMsg(L"请输入好友的 公网IP:端口 再按回车");
+                } else { g_menuPage=0; g_menuSel=0; g_nameBuf.clear(); }
             }
         } else if(g_gamestate==GAME_PAUSE){
             if(g_pauseSel==0){ g_gamestate=GAME_PLAY; }
-            else if(g_pauseSel==1){ SaveGame(); g_gamestate=GAME_MENU; g_menuSel=1; }
+            else if(g_pauseSel==1){ SaveGame(); g_gamestate=GAME_MENU; g_menuPage=0; g_menuSel=1; }
             else { SaveGame(); PostQuitMessage(0); }
         } else if(g_gamestate==GAME_DEAD){
             g_hp=100; g_san=100; g_hun=100; g_thr=100; g_sta=100;
@@ -1685,23 +1713,24 @@ static void DrawItems(const Mat4&vp){
         Vec3 p=it.pos+Vec3(0,bob,0);
         Mat4 model=M4Mul(M4T(p),M4RY(it.rot));
         if(it.type==1){
-            Mat4 m1=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m1,model,meshBottle,g_texBottle,Vec3(0.55f,0.75f,0.95f));
-            Mat4 cap=M4Mul(M4T(Vec3(0,0.15f,0)),M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,M4Mul(model,cap),model,meshCap,g_texBottle,Vec3(0.7f,0.85f,1.0f));
+            Mat4 m1=M4Mul(model,M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,m1,model,meshBottle,g_texBottle,Vec3(1.25f,1.5f,1.8f));
+            Mat4 cap=M4Mul(M4T(Vec3(0,0.15f,0)),M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,M4Mul(model,cap),model,meshCap,g_texBottle,Vec3(1.4f,1.7f,2.0f));
         } else if(it.type==2){
-            Mat4 m2=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m2,model,meshMeat,g_texMeatTex,Vec3(1,1,1));
+            Mat4 m2=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,m2,model,meshMeat,g_texMeatTex,Vec3(1.5f,1.15f,1.15f));
         } else if(it.type==3){
-            Mat4 m3=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m3,model,meshFlashB,g_texMetal,Vec3(0.8f,0.8f,0.85f));
-            Mat4 h3=M4Mul(M4T(Vec3(0,0.1f,0)),M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,M4Mul(model,h3),model,meshFlashH,g_texMetal,Vec3(0.9f,0.9f,0.95f));
+            Mat4 m3=M4Mul(model,M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,m3,model,meshFlashB,g_texMetal,Vec3(1.3f,1.3f,1.45f));
+            Mat4 h3=M4Mul(M4T(Vec3(0,0.1f,0)),M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,M4Mul(model,h3),model,meshFlashH,g_texMetal,Vec3(1.5f,1.5f,1.6f));
         } else if(it.type==4){
-            Mat4 m4=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m4,model,meshBook,g_texBook,Vec3(1,1,1));
+            Mat4 m4=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,m4,model,meshBook,g_texBook,Vec3(1.35f,1.3f,1.0f));
         } else if(it.type==5){
-            DrawAKM(vp,model);
+            Mat4 m5=M4Mul(model,M4S(Vec3(1.2f,1.2f,1.2f)));
+            DrawAKM(vp,m5);
         }
     }
 }
@@ -1759,67 +1788,73 @@ static bool MouseIn(float x,float y,float w,float h){
     return mp.x>=x&&mp.x<=x+w&&mp.y>=y&&mp.y<=y+h;
 }
 
-// ==================== humanoid model ====================
+// ==================== humanoid model (realistic proportions) ====================
 // skin, shirt, pants textures + black for hair/shoes
 static Vec3 CLR_SKIN=Vec3(1,1,1), CLR_SHIRT=Vec3(1,1,1), CLR_PANTS=Vec3(1,1,1), CLR_DARK=Vec3(1,1,1);
 static Mat4 PartM(const Mat4&parent,const Vec3&t,const Mat4&rot,const Vec3&s){
     return M4Mul(parent,M4Mul(M4T(t),M4Mul(rot,M4S(s))));
 }
-static void Part(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
+static void PartMesh(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
     Mat4 rot=M4Id(); rot.m[0]=m.m[0]; rot.m[1]=m.m[1]; rot.m[2]=m.m[2];
     rot.m[4]=m.m[4]; rot.m[5]=m.m[5]; rot.m[6]=m.m[6];
     rot.m[8]=m.m[8]; rot.m[9]=m.m[9]; rot.m[10]=m.m[10];
     DrawObjRot(vp,m,rot,mesh,tex,tint);
 }
+static void Part(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
+    PartMesh(vp,m,mesh,tex,tint);
+}
+// cylinder limb helper: meshCyl is a unit cylinder along Y, scale = (r, len, r)
+static Mat4 Limb(const Mat4&parent,const Vec3&t,float r,float len){
+    return M4Mul(parent,M4Mul(M4T(t),M4S(Vec3(r,len,r))));
+}
+static void DrawFingers(const Mat4&vp,const Mat4&handM,int dir){
+    for(int i=0;i<5;i++){
+        float fx=dir*0.022f*(i-2);
+        Mat4 f=PartM(handM,Vec3(fx,-0.02f,0.05f),M4RX(0.4f),Vec3(1,1,1));
+        // finger capsule along +z (meshCyl along Y -> rotate Y to Z)
+        Mat4 fm=M4Mul(f,M4Mul(M4T(Vec3(0,0,0.045f)),M4Mul(M4RX(PI/2),M4S(Vec3(0.011f,0.085f,0.011f)))));
+        PartMesh(vp,fm,meshCyl,g_texSkin,CLR_SKIN);
+        // fingertip ball
+        Mat4 tip=M4Mul(f,M4Mul(M4T(Vec3(0,0,0.095f)),M4S(Vec3(0.011f,0.011f,0.011f))));
+        PartMesh(vp,tip,meshSphere,g_texSkin,CLR_SKIN);
+    }
+}
+static void DrawArm(const Mat4&vp,const Mat4&shoulder,float swing,int dir,GLuint upperTex){
+    PartMesh(vp,Limb(shoulder,Vec3(0,-0.14f,0),0.055f,0.36f),meshCyl,upperTex,CLR_SHIRT);
+    PartMesh(vp,Limb(shoulder,Vec3(0,-0.36f,0),0.045f,0.30f),meshCyl,g_texSkin,CLR_SKIN);
+    PartMesh(vp,M4Mul(shoulder,M4Mul(M4T(Vec3(0,-0.52f,0)),M4S(Vec3(0.06f,0.075f,0.07f)))),meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(shoulder,M4Mul(M4T(Vec3(0,-0.60f,0.02f)),M4S(Vec3(1,1,1)))),dir);
+}
+static void DrawLeg(const Mat4&vp,const Mat4&hip,float swing){
+    PartMesh(vp,Limb(hip,Vec3(0,-0.24f,0),0.080f,0.55f),meshCyl,g_texPants,CLR_PANTS);
+    PartMesh(vp,M4Mul(hip,M4Mul(M4T(Vec3(0,-0.50f,0.01f)),M4S(Vec3(0.056f,0.056f,0.056f)))),meshSphere,g_texPants,CLR_PANTS);
+    PartMesh(vp,Limb(hip,Vec3(0,-0.64f,0.01f),0.063f,0.48f),meshCyl,g_texPants,CLR_PANTS);
+    Part(vp,M4Mul(hip,M4Mul(M4T(Vec3(0,-0.91f,0.11f)),M4S(Vec3(0.105f,0.08f,0.27f)))),meshBox,g_texPants,CLR_DARK);
+}
 static void DrawHumanoid(const Mat4&vp,const Vec3&root,float yaw,float pitch,bool isLocal,float ph){
-    // root at feet; body faces -z by default; rotate by yaw
+    // root at feet; realistic body ~1.9m
     Mat4 base=M4Mul(M4T(root),M4RY(yaw));
     float sw=sinf(ph)*0.7f, swA=sinf(ph)*0.55f;
     float bend=pitch*0.5f;
-    // torso
-    Mat4 pel=PartM(base,Vec3(0,0.95f,0),M4Id(),Vec3(0.34f,0.16f,0.22f));
-    Part(vp,pel,meshBox,g_texPants,CLR_PANTS);
-    Mat4 chest=PartM(base,Vec3(0,1.28f,0),M4RX(bend*0.3f),Vec3(0.42f,0.5f,0.26f));
-    Part(vp,chest,meshBox,g_texShirt,CLR_SHIRT);
-    // head
-    Mat4 headM=PartM(base,Vec3(0,1.66f,0),M4RX(bend),Vec3(1,1,1));
-    DrawObjRot(vp,M4Mul(headM,M4S(Vec3(0.13f,0.16f,0.14f))),headM,meshSphere,g_texSkin,CLR_SKIN);
-    Mat4 hair=PartM(base,Vec3(0,1.79f,0),M4RX(bend),Vec3(0.26f,0.10f,0.28f));
-    Part(vp,hair,meshBox,g_texPants,CLR_DARK);
-    Mat4 eyeL=PartM(base,Vec3(-0.055f,1.68f,0.12f),M4Id(),Vec3(0.03f,0.02f,0.01f));
-    Part(vp,eyeL,meshBox,g_texPants,CLR_DARK);
-    Mat4 eyeR=PartM(base,Vec3(0.055f,1.68f,0.12f),M4Id(),Vec3(0.03f,0.02f,0.01f));
-    Part(vp,eyeR,meshBox,g_texPants,CLR_DARK);
+    // pelvis, waist, chest (shoulders wider than waist)
+    Part(vp,PartM(base,Vec3(0,1.00f,0),M4Id(),Vec3(0.30f,0.15f,0.20f)),meshBox,g_texPants,CLR_PANTS);
+    Part(vp,PartM(base,Vec3(0,1.16f,0),M4RX(bend*0.2f),Vec3(0.30f,0.11f,0.18f)),meshBox,g_texShirt,CLR_SHIRT);
+    Part(vp,PartM(base,Vec3(0,1.40f,0),M4RX(bend*0.3f),Vec3(0.52f,0.46f,0.28f)),meshBox,g_texShirt,CLR_SHIRT);
+    // rounded shoulders
+    PartMesh(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,PartM(base,Vec3(0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
+    // head: ellipsoid skull + hair cap + eyes
+    Mat4 headM=PartM(base,Vec3(0,1.82f,0),M4RX(bend),Vec3(1,1,1));
+    DrawObjRot(vp,M4Mul(headM,M4S(Vec3(0.105f,0.135f,0.115f))),headM,meshSphere,g_texSkin,CLR_SKIN);
+    DrawObjRot(vp,M4Mul(PartM(base,Vec3(0,1.91f,0),M4RX(bend),Vec3(1,1,1)),M4S(Vec3(0.115f,0.06f,0.125f))),headM,meshSphere,g_texPants,CLR_DARK);
+    PartMesh(vp,PartM(base,Vec3(-0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
+    PartMesh(vp,PartM(base,Vec3(0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
     // legs
-    Mat4 hipL=PartM(base,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1));
-    Mat4 thighL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-    Part(vp,thighL,meshBox,g_texPants,CLR_PANTS);
-    Mat4 shinL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-    Part(vp,shinL,meshBox,g_texPants,CLR_PANTS);
-    Mat4 footL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-    Part(vp,footL,meshBox,g_texPants,CLR_DARK);
-    Mat4 hipR=PartM(base,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1));
-    Mat4 thighR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-    Part(vp,thighR,meshBox,g_texPants,CLR_PANTS);
-    Mat4 shinR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-    Part(vp,shinR,meshBox,g_texPants,CLR_PANTS);
-    Mat4 footR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-    Part(vp,footR,meshBox,g_texPants,CLR_DARK);
+    DrawLeg(vp,PartM(base,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1)),sw);
+    DrawLeg(vp,PartM(base,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1)),-sw);
     // arms
-    Mat4 shL=PartM(base,Vec3(-0.25f,1.45f,0),M4RX(swA*0.6f+bend*0.4f),Vec3(1,1,1));
-    Mat4 upL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.16f,0)),M4S(Vec3(0.09f,0.34f,0.1f))));
-    Part(vp,upL,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.42f,0)),M4S(Vec3(0.075f,0.28f,0.085f))));
-    Part(vp,foL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.57f,0)),M4S(Vec3(0.07f,0.09f,0.075f))));
-    Part(vp,handL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 shR=PartM(base,Vec3(0.25f,1.45f,0),M4RX(-swA*0.6f+bend*0.4f),Vec3(1,1,1));
-    Mat4 upR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.16f,0)),M4S(Vec3(0.09f,0.34f,0.1f))));
-    Part(vp,upR,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.42f,0)),M4S(Vec3(0.075f,0.28f,0.085f))));
-    Part(vp,foR,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.57f,0)),M4S(Vec3(0.07f,0.09f,0.075f))));
-    Part(vp,handR,meshBox,g_texSkin,CLR_SKIN);
+    DrawArm(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4RX(swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,-1,g_texShirt);
+    DrawArm(vp,PartM(base,Vec3(0.28f,1.52f,0),M4RX(-swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,1,g_texShirt);
 }
 struct Vec4{ float x,y,z,w; Vec4(){} Vec4(float a,float b,float c,float d):x(a),y(b),z(c),w(d){} };
 static Vec4 Vec4Mul(const Mat4&m,const Vec4&v){
@@ -1855,37 +1890,21 @@ static void DrawRemotePlayers(const Mat4&vp){
 
 
 // ==================== first person arms & legs ====================
-static void DrawHandMesh(const Mat4&vp,const Mat4&m){
-    Mat4 rot=M4Id(); rot.m[0]=m.m[0]; rot.m[1]=m.m[1]; rot.m[2]=m.m[2];
-    rot.m[4]=m.m[4]; rot.m[5]=m.m[5]; rot.m[6]=m.m[6];
-    rot.m[8]=m.m[8]; rot.m[9]=m.m[9]; rot.m[10]=m.m[10];
-    DrawObjRot(vp,m,rot,meshBox,g_texSkin,CLR_SKIN);
-}
-static void DrawFingers(const Mat4&vp,const Mat4&handM,int dir){
-    for(int i=0;i<5;i++){
-        float fx=dir*0.045f*(i-2);
-        Mat4 f=PartM(handM,Vec3(fx,-0.03f,0.055f),M4RX(0.5f),Vec3(0.02f,0.07f,0.02f));
-        DrawHandMesh(vp,f);
-    }
-}
 static void DrawHandsFP(const Mat4&vp){
     Mat4 camBase=M4Mul(M4T(g_camPos),M4Mul(M4RY(g_yaw),M4RX(-g_pitch)));
     Vec3 bob(0,sinf(g_walkT*2.2f)*0.015f,0);
     camBase=M4Mul(M4T(bob),camBase);
-    bool holdingAKM=false; (void)holdingAKM;
     float recoil=g_recoil*0.08f;
     float eatR=(g_eatAnim>0.5f||g_drinkAnim>0.5f)?1.0f:0.0f;
-    // right arm
-    Mat4 shR=PartM(camBase,Vec3(0.30f,-0.32f,-0.5f),M4RX(-0.4f+eatR*1.3f+recoil),Vec3(1,1,1));
-    Mat4 upR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.10f,0.12f)),M4S(Vec3(0.07f,0.26f,0.08f))));
-    Part(vp,upR,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.26f,0.24f)),M4S(Vec3(0.06f,0.22f,0.07f))));
-    Part(vp,foR,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handR=PartM(shR,Vec3(0,-0.36f,0.34f),M4Id(),Vec3(0.055f,0.07f,0.06f));
-    DrawHandMesh(vp,handR);
-    DrawFingers(vp,handR,1);
+    // right arm (cylinder limbs + realistic hand with fingers)
+    Mat4 shR=PartM(camBase,Vec3(0.30f,-0.30f,-0.48f),M4RX(-0.4f+eatR*1.3f+recoil),Vec3(1,1,1));
+    PartMesh(vp,Limb(shR,Vec3(0,-0.10f,0.10f),0.055f,0.32f),meshCyl,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,Limb(shR,Vec3(0,-0.28f,0.20f),0.045f,0.26f),meshCyl,g_texSkin,CLR_SKIN);
+    Mat4 handR=PartM(shR,Vec3(0,-0.40f,0.28f),M4Id(),Vec3(0.06f,0.075f,0.07f));
+    PartMesh(vp,handR,meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(handR,M4T(Vec3(0,0.01f,0.02f))),1);
     // held item in right hand (by hotbar slot)
-    Mat4 hold=M4Mul(handR,M4T(Vec3(0,0,0.09f)));
+    Mat4 hold=M4Mul(handR,M4T(Vec3(0,0,0.10f)));
     int heldId=(g_hotbarSel<(int)g_inv.size())?g_inv[g_hotbarSel].id:0;
     if(heldId==5){
         DrawAKM(vp,hold);
@@ -1902,32 +1921,18 @@ static void DrawHandsFP(const Mat4&vp){
         DrawObjRot(vp,M4Mul(hold,M4S(Vec3(1.2f,1.2f,1.2f))),hold,meshBook,g_texBook,Vec3(1,1,1));
     }
     // left arm
-    Mat4 shL=PartM(camBase,Vec3(-0.30f,-0.32f,-0.5f),M4RX(-0.4f+eatR*1.0f),Vec3(1,1,1));
-    Mat4 upL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.10f,0.10f)),M4S(Vec3(0.07f,0.26f,0.08f))));
-    Part(vp,upL,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.26f,0.20f)),M4S(Vec3(0.06f,0.22f,0.07f))));
-    Part(vp,foL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handL=PartM(shL,Vec3(0,-0.36f,0.30f),M4Id(),Vec3(0.055f,0.07f,0.06f));
-    DrawHandMesh(vp,handL);
-    DrawFingers(vp,handL,-1);
-    // legs & feet when looking down
+    Mat4 shL=PartM(camBase,Vec3(-0.30f,-0.30f,-0.48f),M4RX(-0.4f+eatR*1.0f),Vec3(1,1,1));
+    PartMesh(vp,Limb(shL,Vec3(0,-0.10f,0.10f),0.055f,0.32f),meshCyl,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,Limb(shL,Vec3(0,-0.28f,0.18f),0.045f,0.26f),meshCyl,g_texSkin,CLR_SKIN);
+    Mat4 handL=PartM(shL,Vec3(0,-0.40f,0.26f),M4Id(),Vec3(0.06f,0.075f,0.07f));
+    PartMesh(vp,handL,meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(handL,M4T(Vec3(0,0.01f,0.02f))),-1);
+    // legs & feet when looking down (realistic cylinder legs)
     if(g_pitch<-0.35f){
         Mat4 legBase=M4Mul(M4T(g_pos),M4RY(g_yaw));
         float sw=sinf(g_walkT*1.6f)*0.5f;
-        Mat4 hipL=PartM(legBase,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1));
-        Mat4 thighL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-        Part(vp,thighL,meshBox,g_texPants,CLR_PANTS);
-        Mat4 shinL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-        Part(vp,shinL,meshBox,g_texPants,CLR_PANTS);
-        Mat4 footL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-        Part(vp,footL,meshBox,g_texPants,CLR_DARK);
-        Mat4 hipR=PartM(legBase,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1));
-        Mat4 thighR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-        Part(vp,thighR,meshBox,g_texPants,CLR_PANTS);
-        Mat4 shinR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-        Part(vp,shinR,meshBox,g_texPants,CLR_PANTS);
-        Mat4 footR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-        Part(vp,footR,meshBox,g_texPants,CLR_DARK);
+        DrawLeg(vp,PartM(legBase,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1)),sw);
+        DrawLeg(vp,PartM(legBase,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1)),-sw);
     }
 }
 
@@ -1936,22 +1941,65 @@ static void DrawHUD(){
     glDisable(GL_DEPTH_TEST);
     g_uiMvp=M4Ortho(0,(float)g_W,(float)g_H,0,-1,1);
     if(g_gamestate==GAME_MENU){
-        DrawQuadTex(0,0,(float)g_W,(float)g_H,Vec3(0.02f,0.015f,0.02f),0.96f,g_texWhite);
-        DrawText((float)g_W/2-230,120,L"后 世  Afterlife",52,Vec3(0.9f,0.83f,0.55f),1.0f);
-        DrawText((float)g_W/2-180,185,L"—— Backrooms 无限迷宫 · 生存 ——",22,Vec3(0.7f,0.7f,0.72f),1.0f);
-        float bw=320,bh=52,bx=(float)g_W/2-bw/2,by=300;
-        const wchar_t* items[3]={L"开始新游戏",L"继续游戏",L"退出游戏"};
+        float W=(float)g_W, H=(float)g_H;
+        // ---- backrooms menu background (procedural corridor) ----
+        DrawQuadTex(0,0,W,H,Vec3(0.03f,0.025f,0.02f),1.0f,g_texWhite);
+        float cy1=H*0.22f;
+        for(float y=0;y<cy1;y+=160){ float h=min(160.0f,cy1-y);
+            for(float x=0;x<W;x+=256){ float w=min(256.0f,W-x);
+                DrawQuadTex(x,y,w,h,Vec3(0.72f,0.74f,0.78f),0.45f,g_texPanel); } }
+        float wy0=H*0.22f, wy1=H*0.65f, wallW=W*0.30f;
+        for(float x=0;x<wallW;x+=256){ for(float y=wy0;y<wy1;y+=256){
+            float w=min(256.0f,wallW-x), h=min(256.0f,wy1-y);
+            DrawQuadTex(x,y,w,h,Vec3(1,1,1),0.82f,g_texWall); }}
+        for(float x=W-wallW;x<W;x+=256){ for(float y=wy0;y<wy1;y+=256){
+            float w=min(256.0f,W-x), h=min(256.0f,wy1-y);
+            DrawQuadTex(x,y,w,h,Vec3(1,1,1),0.82f,g_texWall); }}
+        for(float y=wy1;y<H;y+=256){ float h=min(256.0f,H-y);
+            for(float x=0;x<W;x+=256){ float w=min(256.0f,W-x);
+                DrawQuadTex(x,y,w,h,Vec3(0.85f,0.85f,0.9f),0.9f,g_texFloor); } }
+        for(int k=0;k<3;k++){
+            DrawQuadTex(W*(0.30f+0.18f*k),H*0.05f,W*0.16f,H*0.10f,Vec3(1.0f,1.0f,0.86f),0.9f,g_texWhite);
+        }
+        DrawQuadTex((W-W*0.5f)/2,H*0.08f,W*0.5f,H*0.56f,Vec3(0.02f,0.015f,0.01f),0.55f,g_texWhite);
+        DrawQuadTex(0,0,W,H,Vec3(0.05f,0.04f,0.03f),0.55f,g_texWhite);
+        // ---- title & buttons ----
+        DrawText(W/2-240,52,L"后 世  Afterlife",60,Vec3(0.92f,0.84f,0.55f),1.0f);
+        DrawText(W/2-200,122,L"—— BACKROOMS 无限迷宫 · 生存 ——",22,Vec3(0.75f,0.75f,0.72f),1.0f);
+        const wchar_t* items0[3]={L"单人游戏",L"多人游戏",L"退出游戏"};
+        const wchar_t* items1[3]={L"开始新游戏",L"继续游戏",L"返回"};
+        const wchar_t* items2[3]={L"开始新游戏",L"加入联机",L"返回"};
+        const wchar_t** items=g_menuPage==0?items0:(g_menuPage==1?items1:items2);
+        float bw=380,bh=58,bx=W/2-bw/2,by=H*0.33f;
         for(int i=0;i<3;i++){
-            float y=by+i*76;
+            float y=by+i*(bh+18);
             bool hv=MouseIn(bx,y,bw,bh);
-            DrawQuadTex(bx,y,bw,bh,hv?Vec3(0.30f,0.26f,0.16f):Vec3(0.14f,0.12f,0.10f),0.95f,g_texWhite);
-            if(g_menuSel==i) DrawQuadTex(bx,y,bw,bh,Vec3(0.9f,0.7f,0.2f),0.18f,g_texWhite);
-            DrawText(bx+bw/2-60,y+10,items[i],30,hv?Vec3(1,0.95f,0.7f):Vec3(0.9f,0.9f,0.9f),1.0f);
+            DrawQuadTex(bx,y,bw,bh,hv?Vec3(0.32f,0.27f,0.15f):Vec3(0.10f,0.09f,0.07f),0.92f,g_texWhite);
+            if(g_menuSel==i) DrawQuadTex(bx,y,bw,bh,Vec3(0.95f,0.78f,0.25f),0.22f,g_texWhite);
+            DrawText(bx+bw/2-70,y+11,items[i],30,hv?Vec3(1,0.95f,0.72f):Vec3(0.9f,0.9f,0.88f),1.0f);
             if(hv&&KeyDn(VK_LBUTTON)) g_menuSel=i;
         }
-        DrawText((float)g_W/2-180,560,L"角色名: "+g_nameBuf+((g_time*2.0f-(int)(g_time*2.0f))<0.5f?L"|":L" "),24,Vec3(0.8f,0.8f,0.85f),1.0f);
-        DrawText((float)g_W/2-180,605,L"↑↓ 选择  回车 确认  直接输入角色名",18,Vec3(0.5f,0.5f,0.55f),1.0f);
-        DrawText((float)g_W/2-180,80,L"联机: 我的码 "+wstring(g_pubIP.begin(),g_pubIP.end())+L":"+to_wstring(g_pubPort)+L"  (O键广播开关)",18,Vec3(0.6f,0.7f,0.6f),1.0f);
+        // input line & hints
+        wstring hint,inputL;
+        if(g_menuPage==0) hint=L"↑↓ 选择  回车 进入";
+        else if(g_menuPage==1){
+            if(g_menuSel==0){ hint=L"输入角色名，回车开始单人游戏"; inputL=L"角色名: "; }
+            else if(g_menuSel==1){ hint=L"读取之前的存档继续"; }
+            else hint=L"返回主菜单";
+        } else {
+            if(g_menuSel==0){ hint=L"输入角色名，回车开始多人游戏（自动广播联机码）"; inputL=L"角色名: "; }
+            else if(g_menuSel==1){ hint=L"输入好友 公网IP:端口，回车加入同一迷宫"; inputL=L"加入: "; }
+            else hint=L"返回主菜单";
+        }
+        if(!inputL.empty()){
+            wstring disp=inputL+g_nameBuf+(((int)(g_time*2.0f))%2?L"▌":L" ");
+            DrawText(W/2-280,by+3*(bh+18)+16,disp,24,Vec3(0.88f,0.88f,0.92f),1.0f);
+        }
+        DrawText(W/2-280,by+3*(bh+18)+54,hint,18,Vec3(0.62f,0.62f,0.64f),1.0f);
+        if(g_menuPage==2){
+            DrawText(W/2-280,H-72,L"联机码: "+wstring(g_pubIP.begin(),g_pubIP.end())+L":"+to_wstring(g_pubPort)+L"  好友聊天框输入 /join 你的联机码 加入",18,Vec3(0.6f,0.72f,0.6f),1.0f);
+        }
+        DrawText(W/2-280,H-42,L"后世 Afterlife v2 · 程序化无限迷宫 · OpenGL 3.3 · 自动内网穿透",16,Vec3(0.45f,0.45f,0.48f),1.0f);
         return;
     }
     if(g_gamestate==GAME_PAUSE){
@@ -2287,6 +2335,19 @@ static void RenderLoadingFrames(int n){
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
+    // embedded CJK font (resource 200) so text always works even without system fonts
+    {
+        HRSRC hr=FindResourceW(NULL,MAKEINTRESOURCEW(200),MAKEINTRESOURCEW(10));
+        if(hr){
+            HGLOBAL hg=LoadResource(NULL,hr); void* p=(hg?LockResource(hg):NULL);
+            DWORD sz=SizeofResource(NULL,hr);
+            if(p&&sz>0){
+                wstring fp=g_exeDir+L"\\_sysfont.ttf";
+                FILE* f=_wfopen(fp.c_str(),L"wb");
+                if(f){ fwrite(p,1,sz,f); fclose(f); AddFontResourceW(fp.c_str()); DeleteFileW(fp.c_str()); }
+            }
+        }
+    }
     AddFontResourceW((g_exeDir+L"\\font.ttc").c_str());
     NetInit();
     srand(GetTickCount());
@@ -2332,6 +2393,15 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
             RenderLoadingFrames(2);
             UpdateChunks();
             g_gamestate=GAME_PLAY;
+            if(!g_pendingJoin.empty()){
+                wstring addr=g_pendingJoin; g_pendingJoin.clear();
+                size_t colon=addr.rfind(L':');
+                if(colon!=wstring::npos){
+                    string ip(addr.substr(0,colon).begin(),addr.substr(0,colon).end());
+                    int port=_wtoi(addr.substr(colon+1).c_str());
+                    if(port>0){ NetJoin(ip.c_str(),port); AddMsg(L"正在尝试穿透连接 "+addr+L" ..."); }
+                }
+            }
         }
         else if(g_gamestate==GAME_PLAY) UpdateGame(dt);
         else UpdateMenu(dt);
