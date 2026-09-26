@@ -129,7 +129,6 @@ static void UpdateGame(float dt){
     }
     for(size_t i=0;i<g_views.size();i++) g_views[i].t-=dt;
     for(size_t i=0;i<g_views.size();) { if(g_views[i].t<=0) g_views.erase(g_views.begin()+i); else i++; }
-    if(g_textCache.size()>500) g_textCache.clear();
     if(g_eatAnim>0) g_eatAnim=MaxF(0,g_eatAnim-dt*2.5f);
     if(g_drinkAnim>0) g_drinkAnim=MaxF(0,g_drinkAnim-dt*2.5f);
     if(g_recoil>0) g_recoil=MaxF(0,g_recoil-dt*4.0f);
@@ -296,7 +295,6 @@ static void StartNewGame(bool multi){
 }
 static void UpdateMenu(float dt){
     g_dt=dt;
-    if(g_textCache.size()>500) g_textCache.clear();
     if(KeyDn(VK_UP)&&!g_prevUp){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+2)%3; } else g_pauseSel=(g_pauseSel+2)%3; Sfx(L"sfx_click.wav"); }
     if(KeyDn(VK_DOWN)&&!g_prevDown){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+1)%3; } else g_pauseSel=(g_pauseSel+1)%3; Sfx(L"sfx_click.wav"); }
     g_prevUp=KeyDn(VK_UP)?1:0; g_prevDown=KeyDn(VK_DOWN)?1:0;
