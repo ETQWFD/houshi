@@ -4,7 +4,7 @@
 from PIL import Image, ImageDraw, ImageFont
 import sys, os
 
-CELL=16; COLS=64; SIZE=COLS*CELL  # 1024
+CELL=32; COLS=64; SIZE=COLS*CELL  # 2048
 MAX_CELLS=COLS*COLS               # 4096
 
 # char set: ASCII + GB2312 level-1 hanzi + common CJK punctuation
@@ -25,13 +25,13 @@ chars=sorted(chars)
 if len(chars)>MAX_CELLS:
     print("TOO MANY CHARS", len(chars)); sys.exit(1)
 
-font=ImageFont.truetype("font_sub.ttf", CELL)
+font=ImageFont.truetype("font_sub.ttf", CELL-6)
 img=Image.new("L",(SIZE,SIZE),0)
 dr=ImageDraw.Draw(img)
 for i,ch in enumerate(chars):
     c=i%COLS; r=i//COLS
     x=c*CELL; y=r*CELL
-    dr.text((x+1,y+1),ch,font=font,fill=255)
+    dr.text((x+4,y+2),ch,font=font,fill=255)
 img.save("font_atlas.png")
 raw=img.tobytes()
 open("font_atlas.raw","wb").write(raw)
