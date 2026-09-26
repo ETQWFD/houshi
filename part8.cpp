@@ -152,19 +152,7 @@ static void RenderLoadingFrames(int n){
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
-    // embedded CJK font (resource 200) so text always works even without system fonts
-    {
-        HRSRC hr=FindResourceW(NULL,MAKEINTRESOURCEW(200),MAKEINTRESOURCEW(10));
-        if(hr){
-            HGLOBAL hg=LoadResource(NULL,hr); void* p=(hg?LockResource(hg):NULL);
-            DWORD sz=SizeofResource(NULL,hr);
-            if(p&&sz>0){
-                wstring fp=g_exeDir+L"\\_sysfont.ttf";
-                FILE* f=_wfopen(fp.c_str(),L"wb");
-                if(f){ fwrite(p,1,sz,f); fclose(f); AddFontResourceW(fp.c_str()); DeleteFileW(fp.c_str()); }
-            }
-        }
-    }
+    // optional external font (kept for compatibility; the game works without it)
     AddFontResourceW((g_exeDir+L"\\font.ttc").c_str());
     NetInit();
     srand(GetTickCount());
@@ -175,6 +163,7 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     // loading frames need these two ready
     { Canvas c(8,8); CanvasFillRect(c,0,0,8,8,255,255,255); g_texWhite=c.Upload(); }
     MakeBaseMeshes();
+    InitFontAtlas();
     g_loadText=L"正在初始化 OpenGL 渲染器 ..."; RenderLoadingFrames(1);
     CompilePrograms();
     g_loadText=L"正在编译着色器 (OpenGL 3.3) ..."; RenderLoadingFrames(2);
