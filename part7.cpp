@@ -196,6 +196,37 @@ static void DrawHUD(){
         }
         glDisable(GL_BLEND);
     }
+    if(g_helpOpen){
+        float W=(float)g_W, H=(float)g_H;
+        DrawQuadTex(0,0,W,H,Vec3(0,0,0),0.78f,g_texWhite);
+        const wchar_t* lines[]={
+            L"—— 操作说明 ——",
+            L"WASD 移动 · 空格跳跃 · Shift 疾跑",
+            L"鼠标转视角 · F5 切换视角（第一/第三/上帝）",
+            L"E 背包开/关 · 数字键 1-4 选快捷栏 · Q 丢弃",
+            L"F 手电筒开关 · R 换弹 · 左键射击/使用物品",
+            L"T 聊天 · H 帮助/关闭 · F9 存档 · ESC 暂停",
+            L"",
+            L"—— 生存系统 ——",
+            L"血条 / 理智 / 饥饿 / 口渴 / 体力：屏幕左上角",
+            L"银杏水：口渴+50%  理智+20  生命+2",
+            L"腐肉块：饥饿+10%  生命+4  理智-1  经验+1",
+            L"经验满 100 升级：背包容量 +1",
+            L"",
+            L"—— 聊天指令 ——",
+            L"/giop @s akm   给自己一把 AKM 步枪",
+            L"/join IP:端口   加入好友联机",
+            L"/host   开启广播（联机码在屏幕下方）",
+            L"/help   查看指令",
+        };
+        float y=H*0.11f;
+        for(int i=0;i<(int)(sizeof(lines)/sizeof(lines[0]));i++){
+            int px=25; Vec3 col(0.92f,0.9f,0.85f);
+            if(wcsstr(lines[i],L"——")){ px=31; col=Vec3(1.0f,0.85f,0.5f); }
+            DrawText(W*0.5f-TextW(lines[i],px)/2.0f,y,lines[i],px,col,1.0f);
+            y+=px+10;
+        }
+    }
 }
 
 // ==================== frame ====================
