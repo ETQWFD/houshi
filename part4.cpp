@@ -269,6 +269,31 @@ static void UpdateGame(float dt){
     }
 }
 // menu update (menu/pause/dead): arrow select + enter
+static void StartNewGame(bool multi){
+    if(g_nameBuf.empty()) g_nameBuf=L"幸存者";
+    g_playerName=g_nameBuf; g_nameBuf.clear();
+    g_seed=(int)(GetTickCount()^1234567);
+    g_wr=g_seed*7919u+77u;
+    g_hp=100;g_san=100;g_hun=100;g_thr=100;g_sta=100;g_xp=0;
+    g_level=1; g_capacity=40; g_ammo=30; g_flashOn=true;
+    g_pos=SpawnPos(); g_yaw=0; g_pitch=0; g_velY=0; g_onGround=true; g_dead=false;
+    g_inv.assign(g_capacity,InvItem{0,0});
+    g_inv[0].id=3; g_inv[0].cnt=1;
+    g_inv[1].id=4; g_inv[1].cnt=1;
+    g_inv[2].id=1; g_inv[2].cnt=2;
+    g_inv[3].id=2; g_inv[3].cnt=2;
+    SpawnWorld();
+    g_chunks.clear();
+    g_multiplayer=multi;
+    g_pendingJoin.clear();
+    g_gamestate=GAME_GENERATING;
+    g_loadText=multi?L"正在生成多人世界 ...":L"正在生成无限迷宫 ...";
+    g_cam=CM_FP;
+    if(multi){ g_broadcastOn=true; AddMsg(L"多人模式已开启广播，好友可用 /join 你的联机码加入"); }
+    AddMsg(L"欢迎来到《后世》。你被困在了无限迷宫中。");
+    AddMsg(L"WASD移动 空格跳 Shift疾跑 E背包 数字键切换物品 F手电 F5视角 T聊天");
+    AddMsg(L"指令: /giop @s akm 获得步枪  /join IP:端口 联机");
+}
 static void UpdateMenu(float dt){
     g_dt=dt;
     if(g_textCache.size()>500) g_textCache.clear();
@@ -278,41 +303,32 @@ static void UpdateMenu(float dt){
     if(KeyDn(VK_RETURN)&&!g_prevEnter){
         g_prevEnter=1;
         if(g_gamestate==GAME_MENU){
-            if(g_menuSel==0){ // new game
-                if(g_nameBuf.empty()) g_nameBuf=L"幸存者";
-                g_playerName=g_nameBuf;
-                g_seed=(int)(GetTickCount()^1234567);
-                g_wr=g_seed*7919u+77u;
-                g_hp=100;g_san=100;g_hun=100;g_thr=100;g_sta=100;g_xp=0;
-                g_level=1; g_capacity=40; g_ammo=30; g_flashOn=true;
-                g_pos=SpawnPos(); g_yaw=0; g_pitch=0; g_velY=0; g_onGround=true; g_dead=false;
-                g_inv.assign(g_capacity,InvItem{0,0});
-                g_inv[0].id=3; g_inv[0].cnt=1;
-                g_inv[1].id=4; g_inv[1].cnt=1;
-                g_inv[2].id=1; g_inv[2].cnt=2;
-                g_inv[3].id=2; g_inv[3].cnt=2;
-                SpawnWorld();
-                g_chunks.clear();
-                g_gamestate=GAME_GENERATING;
-                g_loadText=L"正在生成无限迷宫 ...";
-                g_cam=CM_FP;
-                AddMsg(L"欢迎来到《后世》。你被困在了无限迷宫中。");
-                AddMsg(L"WASD移动 空格跳 Shift疾跑 E背包 数字键切换物品 F手电 F5视角 T聊天");
-                AddMsg(L"指令: /giop @s akm 获得步枪  /join IP:端口 联机");
-            } else if(g_menuSel==1){ // continue
-                if(LoadGame()){
-                    g_chunks.clear();
-                    g_gamestate=GAME_GENERATING;
-                    g_loadText=L"正在载入存档世界 ...";
-                    g_dead=false; g_cam=CM_FP;
-                    AddMsg(L"已读取存档，欢迎回到《后世》");
-                } else AddMsg(L"没有找到存档！请先创建新游戏");
-            } else { // quit
-                SaveGame(); PostQuitMessage(0);
+            if(g_menuPage==0){
+                if(g_menuSel==0){ g_menuPage=1; g_menuSel=0; Sfx(L"sfx_click.wav"); }        // 单人游戏
+                else if(g_menuSel==1){ g_menuPage=2; g_menuSel=0; Sfx(L"sfx_click.wav"); }    // 多人游戏
+                else { SaveGame(); PostQuitMessage(0); }
+            } else if(g_menuPage==1){
+                if(g_menuSel==0){ StartNewGame(false); }          // 开始新游戏（单人）
+                else if(g_menuSel==1){                            // 继续游戏
+                    if(LoadGame()){
+                        g_chunks.clear();
+                        g_gamestate=GAME_GENERATING;
+                        g_loadText=L"正在载入存档世界 ...";
+                        g_dead=false; g_cam=CM_FP; g_multiplayer=false;
+                        AddMsg(L"已读取存档，欢迎回到《后世》");
+                    } else AddMsg(L"没有找到存档！请先创建新游戏");
+                } else { g_menuPage=0; g_menuSel=0; g_nameBuf.clear(); }
+            } else {                                              // 多人子菜单
+                if(g_menuSel==0){ StartNewGame(true); }           // 开始新游戏（多人）
+                else if(g_menuSel==1){                            // 加入联机（输入 IP:端口）
+                    wstring ip=g_nameBuf; g_nameBuf.clear();
+                    if(!ip.empty()){ StartNewGame(true); g_pendingJoin=ip; }
+                    else AddMsg(L"请输入好友的 公网IP:端口 再按回车");
+                } else { g_menuPage=0; g_menuSel=0; g_nameBuf.clear(); }
             }
         } else if(g_gamestate==GAME_PAUSE){
             if(g_pauseSel==0){ g_gamestate=GAME_PLAY; }
-            else if(g_pauseSel==1){ SaveGame(); g_gamestate=GAME_MENU; g_menuSel=1; }
+            else if(g_pauseSel==1){ SaveGame(); g_gamestate=GAME_MENU; g_menuPage=0; g_menuSel=1; }
             else { SaveGame(); PostQuitMessage(0); }
         } else if(g_gamestate==GAME_DEAD){
             g_hp=100; g_san=100; g_hun=100; g_thr=100; g_sta=100;
