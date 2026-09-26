@@ -267,23 +267,24 @@ static void DrawItems(const Mat4&vp){
         Vec3 p=it.pos+Vec3(0,bob,0);
         Mat4 model=M4Mul(M4T(p),M4RY(it.rot));
         if(it.type==1){
-            Mat4 m1=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m1,model,meshBottle,g_texBottle,Vec3(0.55f,0.75f,0.95f));
-            Mat4 cap=M4Mul(M4T(Vec3(0,0.15f,0)),M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,M4Mul(model,cap),model,meshCap,g_texBottle,Vec3(0.7f,0.85f,1.0f));
+            Mat4 m1=M4Mul(model,M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,m1,model,meshBottle,g_texBottle,Vec3(1.25f,1.5f,1.8f));
+            Mat4 cap=M4Mul(M4T(Vec3(0,0.15f,0)),M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,M4Mul(model,cap),model,meshCap,g_texBottle,Vec3(1.4f,1.7f,2.0f));
         } else if(it.type==2){
-            Mat4 m2=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m2,model,meshMeat,g_texMeatTex,Vec3(1,1,1));
+            Mat4 m2=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,m2,model,meshMeat,g_texMeatTex,Vec3(1.5f,1.15f,1.15f));
         } else if(it.type==3){
-            Mat4 m3=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m3,model,meshFlashB,g_texMetal,Vec3(0.8f,0.8f,0.85f));
-            Mat4 h3=M4Mul(M4T(Vec3(0,0.1f,0)),M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,M4Mul(model,h3),model,meshFlashH,g_texMetal,Vec3(0.9f,0.9f,0.95f));
+            Mat4 m3=M4Mul(model,M4S(Vec3(1.5f,1.5f,1.5f)));
+            DrawObjRot(vp,m3,model,meshFlashB,g_texMetal,Vec3(1.3f,1.3f,1.45f));
+            Mat4 h3=M4Mul(M4T(Vec3(0,0.1f,0)),M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,M4Mul(model,h3),model,meshFlashH,g_texMetal,Vec3(1.5f,1.5f,1.6f));
         } else if(it.type==4){
-            Mat4 m4=M4Mul(model,M4S(Vec3(1,1,1)));
-            DrawObjRot(vp,m4,model,meshBook,g_texBook,Vec3(1,1,1));
+            Mat4 m4=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
+            DrawObjRot(vp,m4,model,meshBook,g_texBook,Vec3(1.35f,1.3f,1.0f));
         } else if(it.type==5){
-            DrawAKM(vp,model);
+            Mat4 m5=M4Mul(model,M4S(Vec3(1.2f,1.2f,1.2f)));
+            DrawAKM(vp,m5);
         }
     }
 }
