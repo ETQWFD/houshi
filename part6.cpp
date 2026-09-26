@@ -28,67 +28,73 @@ static bool MouseIn(float x,float y,float w,float h){
     return mp.x>=x&&mp.x<=x+w&&mp.y>=y&&mp.y<=y+h;
 }
 
-// ==================== humanoid model ====================
+// ==================== humanoid model (realistic proportions) ====================
 // skin, shirt, pants textures + black for hair/shoes
 static Vec3 CLR_SKIN=Vec3(1,1,1), CLR_SHIRT=Vec3(1,1,1), CLR_PANTS=Vec3(1,1,1), CLR_DARK=Vec3(1,1,1);
 static Mat4 PartM(const Mat4&parent,const Vec3&t,const Mat4&rot,const Vec3&s){
     return M4Mul(parent,M4Mul(M4T(t),M4Mul(rot,M4S(s))));
 }
-static void Part(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
+static void PartMesh(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
     Mat4 rot=M4Id(); rot.m[0]=m.m[0]; rot.m[1]=m.m[1]; rot.m[2]=m.m[2];
     rot.m[4]=m.m[4]; rot.m[5]=m.m[5]; rot.m[6]=m.m[6];
     rot.m[8]=m.m[8]; rot.m[9]=m.m[9]; rot.m[10]=m.m[10];
     DrawObjRot(vp,m,rot,mesh,tex,tint);
 }
+static void Part(const Mat4&vp,const Mat4&m,const Mesh&mesh,GLuint tex,const Vec3&tint){
+    PartMesh(vp,m,mesh,tex,tint);
+}
+// cylinder limb helper: meshCyl is a unit cylinder along Y, scale = (r, len, r)
+static Mat4 Limb(const Mat4&parent,const Vec3&t,float r,float len){
+    return M4Mul(parent,M4Mul(M4T(t),M4S(Vec3(r,len,r))));
+}
+static void DrawFingers(const Mat4&vp,const Mat4&handM,int dir){
+    for(int i=0;i<5;i++){
+        float fx=dir*0.022f*(i-2);
+        Mat4 f=PartM(handM,Vec3(fx,-0.02f,0.05f),M4RX(0.4f),Vec3(1,1,1));
+        // finger capsule along +z (meshCyl along Y -> rotate Y to Z)
+        Mat4 fm=M4Mul(f,M4Mul(M4T(Vec3(0,0,0.045f)),M4Mul(M4RX(PI/2),M4S(Vec3(0.011f,0.085f,0.011f)))));
+        PartMesh(vp,fm,meshCyl,g_texSkin,CLR_SKIN);
+        // fingertip ball
+        Mat4 tip=M4Mul(f,M4Mul(M4T(Vec3(0,0,0.095f)),M4S(Vec3(0.011f,0.011f,0.011f))));
+        PartMesh(vp,tip,meshSphere,g_texSkin,CLR_SKIN);
+    }
+}
+static void DrawArm(const Mat4&vp,const Mat4&shoulder,float swing,int dir,GLuint upperTex){
+    PartMesh(vp,Limb(shoulder,Vec3(0,-0.14f,0),0.055f,0.36f),meshCyl,upperTex,CLR_SHIRT);
+    PartMesh(vp,Limb(shoulder,Vec3(0,-0.36f,0),0.045f,0.30f),meshCyl,g_texSkin,CLR_SKIN);
+    PartMesh(vp,M4Mul(shoulder,M4Mul(M4T(Vec3(0,-0.52f,0)),M4S(Vec3(0.06f,0.075f,0.07f)))),meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(shoulder,M4Mul(M4T(Vec3(0,-0.60f,0.02f)),M4S(Vec3(1,1,1)))),dir);
+}
+static void DrawLeg(const Mat4&vp,const Mat4&hip,float swing){
+    PartMesh(vp,Limb(hip,Vec3(0,-0.24f,0),0.080f,0.55f),meshCyl,g_texPants,CLR_PANTS);
+    PartMesh(vp,M4Mul(hip,M4Mul(M4T(Vec3(0,-0.50f,0.01f)),M4S(Vec3(0.056f,0.056f,0.056f)))),meshSphere,g_texPants,CLR_PANTS);
+    PartMesh(vp,Limb(hip,Vec3(0,-0.64f,0.01f),0.063f,0.48f),meshCyl,g_texPants,CLR_PANTS);
+    Part(vp,M4Mul(hip,M4Mul(M4T(Vec3(0,-0.91f,0.11f)),M4S(Vec3(0.105f,0.08f,0.27f)))),meshBox,g_texPants,CLR_DARK);
+}
 static void DrawHumanoid(const Mat4&vp,const Vec3&root,float yaw,float pitch,bool isLocal,float ph){
-    // root at feet; body faces -z by default; rotate by yaw
+    // root at feet; realistic body ~1.9m
     Mat4 base=M4Mul(M4T(root),M4RY(yaw));
     float sw=sinf(ph)*0.7f, swA=sinf(ph)*0.55f;
     float bend=pitch*0.5f;
-    // torso
-    Mat4 pel=PartM(base,Vec3(0,0.95f,0),M4Id(),Vec3(0.34f,0.16f,0.22f));
-    Part(vp,pel,meshBox,g_texPants,CLR_PANTS);
-    Mat4 chest=PartM(base,Vec3(0,1.28f,0),M4RX(bend*0.3f),Vec3(0.42f,0.5f,0.26f));
-    Part(vp,chest,meshBox,g_texShirt,CLR_SHIRT);
-    // head
-    Mat4 headM=PartM(base,Vec3(0,1.66f,0),M4RX(bend),Vec3(1,1,1));
-    DrawObjRot(vp,M4Mul(headM,M4S(Vec3(0.13f,0.16f,0.14f))),headM,meshSphere,g_texSkin,CLR_SKIN);
-    Mat4 hair=PartM(base,Vec3(0,1.79f,0),M4RX(bend),Vec3(0.26f,0.10f,0.28f));
-    Part(vp,hair,meshBox,g_texPants,CLR_DARK);
-    Mat4 eyeL=PartM(base,Vec3(-0.055f,1.68f,0.12f),M4Id(),Vec3(0.03f,0.02f,0.01f));
-    Part(vp,eyeL,meshBox,g_texPants,CLR_DARK);
-    Mat4 eyeR=PartM(base,Vec3(0.055f,1.68f,0.12f),M4Id(),Vec3(0.03f,0.02f,0.01f));
-    Part(vp,eyeR,meshBox,g_texPants,CLR_DARK);
+    // pelvis, waist, chest (shoulders wider than waist)
+    Part(vp,PartM(base,Vec3(0,1.00f,0),M4Id(),Vec3(0.30f,0.15f,0.20f)),meshBox,g_texPants,CLR_PANTS);
+    Part(vp,PartM(base,Vec3(0,1.16f,0),M4RX(bend*0.2f),Vec3(0.30f,0.11f,0.18f)),meshBox,g_texShirt,CLR_SHIRT);
+    Part(vp,PartM(base,Vec3(0,1.40f,0),M4RX(bend*0.3f),Vec3(0.52f,0.46f,0.28f)),meshBox,g_texShirt,CLR_SHIRT);
+    // rounded shoulders
+    PartMesh(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,PartM(base,Vec3(0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
+    // head: ellipsoid skull + hair cap + eyes
+    Mat4 headM=PartM(base,Vec3(0,1.82f,0),M4RX(bend),Vec3(1,1,1));
+    DrawObjRot(vp,M4Mul(headM,M4S(Vec3(0.105f,0.135f,0.115f))),headM,meshSphere,g_texSkin,CLR_SKIN);
+    DrawObjRot(vp,M4Mul(PartM(base,Vec3(0,1.91f,0),M4RX(bend),Vec3(1,1,1)),M4S(Vec3(0.115f,0.06f,0.125f))),headM,meshSphere,g_texPants,CLR_DARK);
+    PartMesh(vp,PartM(base,Vec3(-0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
+    PartMesh(vp,PartM(base,Vec3(0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
     // legs
-    Mat4 hipL=PartM(base,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1));
-    Mat4 thighL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-    Part(vp,thighL,meshBox,g_texPants,CLR_PANTS);
-    Mat4 shinL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-    Part(vp,shinL,meshBox,g_texPants,CLR_PANTS);
-    Mat4 footL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-    Part(vp,footL,meshBox,g_texPants,CLR_DARK);
-    Mat4 hipR=PartM(base,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1));
-    Mat4 thighR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-    Part(vp,thighR,meshBox,g_texPants,CLR_PANTS);
-    Mat4 shinR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-    Part(vp,shinR,meshBox,g_texPants,CLR_PANTS);
-    Mat4 footR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-    Part(vp,footR,meshBox,g_texPants,CLR_DARK);
+    DrawLeg(vp,PartM(base,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1)),sw);
+    DrawLeg(vp,PartM(base,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1)),-sw);
     // arms
-    Mat4 shL=PartM(base,Vec3(-0.25f,1.45f,0),M4RX(swA*0.6f+bend*0.4f),Vec3(1,1,1));
-    Mat4 upL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.16f,0)),M4S(Vec3(0.09f,0.34f,0.1f))));
-    Part(vp,upL,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.42f,0)),M4S(Vec3(0.075f,0.28f,0.085f))));
-    Part(vp,foL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.57f,0)),M4S(Vec3(0.07f,0.09f,0.075f))));
-    Part(vp,handL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 shR=PartM(base,Vec3(0.25f,1.45f,0),M4RX(-swA*0.6f+bend*0.4f),Vec3(1,1,1));
-    Mat4 upR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.16f,0)),M4S(Vec3(0.09f,0.34f,0.1f))));
-    Part(vp,upR,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.42f,0)),M4S(Vec3(0.075f,0.28f,0.085f))));
-    Part(vp,foR,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.57f,0)),M4S(Vec3(0.07f,0.09f,0.075f))));
-    Part(vp,handR,meshBox,g_texSkin,CLR_SKIN);
+    DrawArm(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4RX(swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,-1,g_texShirt);
+    DrawArm(vp,PartM(base,Vec3(0.28f,1.52f,0),M4RX(-swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,1,g_texShirt);
 }
 static void DrawRemotePlayers(const Mat4&vp){
     for(auto&kv:g_peers){
@@ -123,37 +129,21 @@ static Vec4 Vec4Mul(const Mat4&m,const Vec4&v){
 }
 
 // ==================== first person arms & legs ====================
-static void DrawHandMesh(const Mat4&vp,const Mat4&m){
-    Mat4 rot=M4Id(); rot.m[0]=m.m[0]; rot.m[1]=m.m[1]; rot.m[2]=m.m[2];
-    rot.m[4]=m.m[4]; rot.m[5]=m.m[5]; rot.m[6]=m.m[6];
-    rot.m[8]=m.m[8]; rot.m[9]=m.m[9]; rot.m[10]=m.m[10];
-    DrawObjRot(vp,m,rot,meshBox,g_texSkin,CLR_SKIN);
-}
-static void DrawFingers(const Mat4&vp,const Mat4&handM,int dir){
-    for(int i=0;i<5;i++){
-        float fx=dir*0.045f*(i-2);
-        Mat4 f=PartM(handM,Vec3(fx,-0.03f,0.055f),M4RX(0.5f),Vec3(0.02f,0.07f,0.02f));
-        DrawHandMesh(vp,f);
-    }
-}
 static void DrawHandsFP(const Mat4&vp){
     Mat4 camBase=M4Mul(M4T(g_camPos),M4Mul(M4RY(g_yaw),M4RX(-g_pitch)));
     Vec3 bob(0,sinf(g_walkT*2.2f)*0.015f,0);
     camBase=M4Mul(M4T(bob),camBase);
-    bool holdingAKM=false; (void)holdingAKM;
     float recoil=g_recoil*0.08f;
     float eatR=(g_eatAnim>0.5f||g_drinkAnim>0.5f)?1.0f:0.0f;
-    // right arm
-    Mat4 shR=PartM(camBase,Vec3(0.30f,-0.32f,-0.5f),M4RX(-0.4f+eatR*1.3f+recoil),Vec3(1,1,1));
-    Mat4 upR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.10f,0.12f)),M4S(Vec3(0.07f,0.26f,0.08f))));
-    Part(vp,upR,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foR=M4Mul(shR,M4Mul(M4T(Vec3(0,-0.26f,0.24f)),M4S(Vec3(0.06f,0.22f,0.07f))));
-    Part(vp,foR,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handR=PartM(shR,Vec3(0,-0.36f,0.34f),M4Id(),Vec3(0.055f,0.07f,0.06f));
-    DrawHandMesh(vp,handR);
-    DrawFingers(vp,handR,1);
+    // right arm (cylinder limbs + realistic hand with fingers)
+    Mat4 shR=PartM(camBase,Vec3(0.30f,-0.30f,-0.48f),M4RX(-0.4f+eatR*1.3f+recoil),Vec3(1,1,1));
+    PartMesh(vp,Limb(shR,Vec3(0,-0.10f,0.10f),0.055f,0.32f),meshCyl,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,Limb(shR,Vec3(0,-0.28f,0.20f),0.045f,0.26f),meshCyl,g_texSkin,CLR_SKIN);
+    Mat4 handR=PartM(shR,Vec3(0,-0.40f,0.28f),M4Id(),Vec3(0.06f,0.075f,0.07f));
+    PartMesh(vp,handR,meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(handR,M4T(Vec3(0,0.01f,0.02f))),1);
     // held item in right hand (by hotbar slot)
-    Mat4 hold=M4Mul(handR,M4T(Vec3(0,0,0.09f)));
+    Mat4 hold=M4Mul(handR,M4T(Vec3(0,0,0.10f)));
     int heldId=(g_hotbarSel<(int)g_inv.size())?g_inv[g_hotbarSel].id:0;
     if(heldId==5){
         DrawAKM(vp,hold);
@@ -170,31 +160,17 @@ static void DrawHandsFP(const Mat4&vp){
         DrawObjRot(vp,M4Mul(hold,M4S(Vec3(1.2f,1.2f,1.2f))),hold,meshBook,g_texBook,Vec3(1,1,1));
     }
     // left arm
-    Mat4 shL=PartM(camBase,Vec3(-0.30f,-0.32f,-0.5f),M4RX(-0.4f+eatR*1.0f),Vec3(1,1,1));
-    Mat4 upL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.10f,0.10f)),M4S(Vec3(0.07f,0.26f,0.08f))));
-    Part(vp,upL,meshBox,g_texShirt,CLR_SHIRT);
-    Mat4 foL=M4Mul(shL,M4Mul(M4T(Vec3(0,-0.26f,0.20f)),M4S(Vec3(0.06f,0.22f,0.07f))));
-    Part(vp,foL,meshBox,g_texSkin,CLR_SKIN);
-    Mat4 handL=PartM(shL,Vec3(0,-0.36f,0.30f),M4Id(),Vec3(0.055f,0.07f,0.06f));
-    DrawHandMesh(vp,handL);
-    DrawFingers(vp,handL,-1);
-    // legs & feet when looking down
+    Mat4 shL=PartM(camBase,Vec3(-0.30f,-0.30f,-0.48f),M4RX(-0.4f+eatR*1.0f),Vec3(1,1,1));
+    PartMesh(vp,Limb(shL,Vec3(0,-0.10f,0.10f),0.055f,0.32f),meshCyl,g_texShirt,CLR_SHIRT);
+    PartMesh(vp,Limb(shL,Vec3(0,-0.28f,0.18f),0.045f,0.26f),meshCyl,g_texSkin,CLR_SKIN);
+    Mat4 handL=PartM(shL,Vec3(0,-0.40f,0.26f),M4Id(),Vec3(0.06f,0.075f,0.07f));
+    PartMesh(vp,handL,meshBox,g_texSkin,CLR_SKIN);
+    DrawFingers(vp,M4Mul(handL,M4T(Vec3(0,0.01f,0.02f))),-1);
+    // legs & feet when looking down (realistic cylinder legs)
     if(g_pitch<-0.35f){
         Mat4 legBase=M4Mul(M4T(g_pos),M4RY(g_yaw));
         float sw=sinf(g_walkT*1.6f)*0.5f;
-        Mat4 hipL=PartM(legBase,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1));
-        Mat4 thighL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-        Part(vp,thighL,meshBox,g_texPants,CLR_PANTS);
-        Mat4 shinL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-        Part(vp,shinL,meshBox,g_texPants,CLR_PANTS);
-        Mat4 footL=M4Mul(hipL,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-        Part(vp,footL,meshBox,g_texPants,CLR_DARK);
-        Mat4 hipR=PartM(legBase,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1));
-        Mat4 thighR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.25f,0)),M4S(Vec3(0.17f,0.52f,0.19f))));
-        Part(vp,thighR,meshBox,g_texPants,CLR_PANTS);
-        Mat4 shinR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.69f,0.02f)),M4S(Vec3(0.13f,0.44f,0.14f))));
-        Part(vp,shinR,meshBox,g_texPants,CLR_PANTS);
-        Mat4 footR=M4Mul(hipR,M4Mul(M4T(Vec3(0,-0.92f,0.09f)),M4S(Vec3(0.11f,0.09f,0.27f))));
-        Part(vp,footR,meshBox,g_texPants,CLR_DARK);
+        DrawLeg(vp,PartM(legBase,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1)),sw);
+        DrawLeg(vp,PartM(legBase,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1)),-sw);
     }
 }
