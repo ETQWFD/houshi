@@ -19,7 +19,7 @@ struct TextTex{ GLuint tex; int w,h; };
 static map<wstring,TextTex> g_textCache;
 static TextTex MakeTextTex(const wstring& s,int px){
     TextTex t; t.w=0;t.h=0;t.tex=0; if(s.empty()) return t;
-    const wchar_t* fonts[]={L"Microsoft YaHei",L"WenQuanYi Zen Hei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
+    const wchar_t* fonts[]={L"WenQuanYi Zen Hei",L"Microsoft YaHei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
     HDC dc=CreateCompatibleDC(NULL);
     int best=-1; vector<unsigned char> bestBits; int bw=0,bh=0;
     for(int fi=0;fi<7;fi++){
