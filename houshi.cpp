@@ -455,58 +455,7 @@ inline void CanvasLine(Canvas&c,int x0,int y0,int x1,int y1,int th,unsigned char
         if(e2>-dy){err-=dy;x0+=sx;} if(e2<dx){err+=dx;y0+=sy;} }
 }
 
-// ==================== GDI text texture (with CJK font fallback) ====================
-struct TextTex{ GLuint tex; int w,h; };
-static map<wstring,TextTex> g_textCache;
-static TextTex MakeTextTex(const wstring& s,int px){
-    TextTex t; t.w=0;t.h=0;t.tex=0; if(s.empty()) return t;
-    const wchar_t* fonts[]={L"WenQuanYi Zen Hei",L"Microsoft YaHei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
-    HDC dc=CreateCompatibleDC(NULL);
-    int best=-1; vector<unsigned char> bestBits; int bw=0,bh=0;
-    for(int fi=0;fi<7;fi++){
-        HFONT f=CreateFontW(-px,0,0,0,FW_NORMAL,0,0,0,GB2312_CHARSET,OUT_DEFAULT_PRECIS,
-                            CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,fonts[fi]);
-        HGDIOBJ of=SelectObject(dc,f);
-        RECT rc={0,0,0,0}; DrawTextW(dc,s.c_str(),-1,&rc,DT_CALCRECT|DT_NOPREFIX);
-        int w=max(1,(int)rc.right), h=max(1,(int)rc.bottom);
-        BITMAPINFO bmi; memset(&bmi,0,sizeof(bmi));
-        bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth=w; bmi.bmiHeader.biHeight=-h;
-        bmi.bmiHeader.biPlanes=1; bmi.bmiHeader.biBitCount=32; bmi.bmiHeader.biCompression=BI_RGB;
-        void* bits=NULL; HBITMAP hbm=CreateDIBSection(dc,&bmi,DIB_RGB_COLORS,&bits,NULL,0);
-        if(bits) memset(bits,0,(size_t)w*h*4);
-        HGDIOBJ ob=SelectObject(dc,hbm);
-        SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(255,255,255));
-        RECT dr={0,0,w,h}; DrawTextW(dc,s.c_str(),-1,&dr,DT_NOPREFIX);
-        vector<unsigned char> buf((size_t)w*h*4);
-        GetDIBits(dc,hbm,0,h,&buf[0],&bmi,DIB_RGB_COLORS);
-        int cov=0; for(size_t i=2;i<buf.size();i+=4) if(buf[i]>60) cov++;
-        float ratio=(float)cov/(float)(w*h);
-        if(ratio>0.03f&&ratio<0.85f){ best=fi; bestBits=buf; bw=w; bh=h; }
-        SelectObject(dc,ob); DeleteObject(hbm); SelectObject(dc,of); DeleteObject(f);
-        if(best>=0) break;
-    }
-    DeleteDC(dc);
-    if(best<0) return t;
-    t.w=bw; t.h=bh;
-    vector<unsigned char> rgba((size_t)bw*bh*4);
-    for(int y=0;y<bh;y++)for(int x=0;x<bw;x++){
-        size_t i=((size_t)y*bw+x)*4; unsigned char a=bestBits[i+2];
-        rgba[i]=255;rgba[i+1]=255;rgba[i+2]=255;rgba[i+3]=a;
-    }
-    glGenTextures(1,&t.tex); glBindTexture(GL_TEXTURE_2D,t.tex);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,bw,bh,0,GL_RGBA,GL_UNSIGNED_BYTE,&rgba[0]);
-    return t;
-}
-static TextTex GetText(const wstring& s,int px){
-    wstring key=s+L"|"+to_wstring(px);
-    auto it=g_textCache.find(key);
-    if(it!=g_textCache.end()) return it->second;
-    TextTex t=MakeTextTex(s,px); g_textCache[key]=t; return t;
-}
+
 
 // ==================== chunks: infinite backrooms ====================
 static const float CELLSZ=8.0f, ROOMH=3.0f, CHUNKSZ=32.0f;
@@ -1225,7 +1174,6 @@ static void UpdateGame(float dt){
     }
     for(size_t i=0;i<g_views.size();i++) g_views[i].t-=dt;
     for(size_t i=0;i<g_views.size();) { if(g_views[i].t<=0) g_views.erase(g_views.begin()+i); else i++; }
-    if(g_textCache.size()>500) g_textCache.clear();
     if(g_eatAnim>0) g_eatAnim=MaxF(0,g_eatAnim-dt*2.5f);
     if(g_drinkAnim>0) g_drinkAnim=MaxF(0,g_drinkAnim-dt*2.5f);
     if(g_recoil>0) g_recoil=MaxF(0,g_recoil-dt*4.0f);
@@ -1391,7 +1339,6 @@ static void StartNewGame(bool multi){
 }
 static void UpdateMenu(float dt){
     g_dt=dt;
-    if(g_textCache.size()>500) g_textCache.clear();
     if(KeyDn(VK_UP)&&!g_prevUp){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+2)%3; } else g_pauseSel=(g_pauseSel+2)%3; Sfx(L"sfx_click.wav"); }
     if(KeyDn(VK_DOWN)&&!g_prevDown){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+1)%3; } else g_pauseSel=(g_pauseSel+1)%3; Sfx(L"sfx_click.wav"); }
     g_prevUp=KeyDn(VK_UP)?1:0; g_prevDown=KeyDn(VK_DOWN)?1:0;
@@ -1759,6 +1706,77 @@ static void DrawAKM(const Mat4&vp,const Mat4&model){
 }
 
 // ==================== UI helpers ====================
+// ==================== bitmap font atlas (self-contained, no system fonts, no external files) ====================
+static GLuint g_fontTex=0; static int g_fontMap[65536];
+static const wchar_t g_fontChars[]=L" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·×—‘’“”…↑↓▌　、。《》【】一丁七万丈三上下不与丑专且世丘丙业丛东丝丢两严丧个丫中丰串临丸丹为主丽举乃久么义之乌乍乎乏乐乒乓乔乖乘乙九乞也习乡书买乱乳乾了予争事二于亏云互五井亚些亡亢交亥亦产亨亩享京亭亮亲人亿什仁仅仆仇今介仍从仑仓仔仕他仗付仙仟代令以仪们仰仲件价任份仿企伊伍伎伏伐休众优伙会伞伟传伤伦伪伯估伴伶伸伺似佃但位低住佐佑体何余佛作你佣佩佬佯佰佳使侄侈例侍侗供依侠侣侥侦侧侨侩侮侯侵便促俄俊俏俐俗俘保俞信俩俭修俯俱俺倍倒倔倘候倚借倡倦倪债值倾假偏做停健偶偷偿傀傅傈傍傣储催傲傻像僚僧僳僵僻儒儡儿允元兄充兆先光克免兑兔党兜兢入全八公六兰共关兴兵其具典兹养兼兽冀内冈冉册再冒冕冗写军农冠冤冬冯冰冲决况冶冷冻净凄准凉凋凌减凑凛凝几凡凤凭凯凰凳凶凸凹出击函凿刀刁刃分切刊刑划列刘则刚创初删判刨利别刮到制刷券刹刺刻刽剁剂剃削前剐剑剔剖剥剧剩剪副割剿劈力劝办功加务劣动助努劫励劲劳势勃勇勉勋勒勘募勤勺勾勿匀包匆匈化北匙匝匠匡匣匪匹区医匿十千升午卉半华协卑卒卓单卖南博卜卞占卡卢卤卧卫卯印危即却卵卷卸卿厂厄厅历厉压厌厕厘厚原厢厦厨厩去县叁参又叉及友双反发叔取受变叙叛叠口古句另只叫召叭叮可台史右叶号司叹叼吁吃各合吉吊同名后吏吐向吓吕吗君吝吞吟吠否吧吨吩含听吭吮启吱吴吵吸吹吻吼吾呀呆呈告呐呕员呛呜呢周味呵呸呻呼命咀咆咋和咎咏咐咒咕咖咙咨咬咯咱咳咸咽哀品哄哆哇哈哉响哎哑哗哟哥哦哨哩哪哭哮哲哺哼唁唆唇唉唐唤唬售唯唱唾啃啄商啊啡啤啥啦啪啮啸啼喀喂善喇喉喊喘喜喝喧喳喷喻嗅嗓嗜嗡嗣嗽嘉嘎嘘嘛嘱嘲嘴嘶嘻嘿噎器噪噬噶嚎嚏嚣嚷嚼囊囚四回因团囤园困囱围固国图圃圆圈土圣在圭地场圾址均坊坍坎坏坐坑块坚坛坝坞坟坠坡坤坦坪坯坷垂垃垄型垒垛垢垣垦垫垮埂埃埋城埔域埠培基堂堆堑堕堡堤堪堰堵塌塑塔塘塞填境墅墒墓墙增墟墨墩壁壕壤士壬壮声壳壶壹处备复夏夕外多夜够大天太夫央夯失头夷夸夹夺奄奇奈奉奋奎奏契奔奖套奠奢奥女奴奶奸她好如妄妆妇妈妊妒妓妖妙妥妨妮妹妻姆始姐姑姓委姚姜姥姨姬姻姿威娃娄娇娘娜娟娠娥娩娱娶婆婉婚婪婴婶婿媒媚媳嫁嫂嫉嫌嫡嫩子孔孕字存孙孜孝孟季孤学孩孪孰孵孺孽宁它宅宇守安宋完宏宗官宙定宛宜宝实宠审客宣室宦宪宫宰害宴宵家容宽宾宿寂寄寅密寇富寐寒寓寝寞察寡寥寨寸对寺寻导寿封射将尉尊小少尔尖尘尚尝尤尧就尸尹尺尼尽尾尿局屁层居屈屉届屋屎屏屑展属屠屡履屯山屹屿岁岂岔岗岛岩岭岳岸岿峙峡峦峨峪峭峰峻崇崎崔崖崩崭嵌巍川州巡巢工左巧巨巩巫差己已巳巴巷巾币市布帅帆师希帐帕帖帘帚帛帜帝带帧席帮常帽幂幅幌幕幢干平年并幸幻幼幽广庄庆庇床序庐库应底店庙庚府庞废度座庭庶康庸廉廊廓廖延廷建开异弃弄弊式弓引弗弘弛弟张弥弦弧弯弱弹强归当录彝形彤彦彩彪彬彭彰影役彻彼往征径待很徊律徐徒得徘御循微德徽心必忆忌忍志忘忙忠忧快忱念忻忽忿怀态怂怎怒怔怕怖怜思怠急性怨怪怯总恃恋恍恐恒恕恢恤恨恩恫恬恭息恰恳恶恼恿悄悉悍悔悟悠患悦您悬悯悲悸悼情惊惋惑惕惜惟惠惦惧惨惩惫惭惮惯惰想惶惹惺愁愈愉意愚感愤愧愿慈慌慎慑慕慢慧慨慰慷憋憎憨憾懂懈懊懒懦戈戊戌戍戎戏成我戒或战戚截戮戳戴户房所扁扇手才扎扑扒打扔托扛扣扦执扩扫扬扭扮扯扰扳扶批扼找承技抄抉把抑抒抓投抖抗折抚抛抠抡抢护报抨披抬抱抵抹押抽抿拂拄担拆拇拈拉拌拍拎拐拒拓拔拖拘拙招拜拟拢拣拥拦拧拨择括拭拯拱拳拴拷拼拽拾拿持挂指按挎挑挖挚挛挝挞挟挠挡挣挤挥挨挪挫振挺挽捂捅捆捉捌捍捎捏捐捕捞损捡换捣捧据捶捷捻掀掂掇授掉掌掏掐排掖掘掠探掣接控推掩措掳掷掸掺揉揍描提插揖握揣揩揪揭援揽搀搁搂搅搏搐搓搔搜搞搪搬搭携搽摄摆摇摈摊摔摘摧摩摸摹撂撅撇撑撒撕撞撤撩撬播撮撰撵撼擂擅操擎擒擞擦攀攒攘攫支收改攻放政故效敌敏救敖教敛敝敞敢散敦敬数敲整敷文斋斌斑斗料斜斟斡斤斥斧斩断斯新方施旁旅旋族旗无既日旦旧旨早旬旭旱时旷旺昂昆昌明昏易昔星映春昧昨昭是昼显晃晋晌晒晓晕晚晤晦晨普景晰晴晶智晾暂暇暑暖暗暮暴曙曝曰曲曳更曹曼曾替最月有朋服朔朗望朝期木未末本札术朱朴朵机朽杀杂权杆杉李杏材村杖杜束杠条来杨杭杯杰松板极构枉析枕林枚果枝枢枣枪枫枯架枷柄柏某柑柒染柔柜柞柠查柬柯柱柳柴柿栅标栈栋栏树栓栖栗校株样核根格栽桂桃桅框案桌桐桑桓桔档桥桨桩桶梁梅梆梗梢梦梧梨梭梯械梳检棉棋棍棒棕棘棚棠森棱棵棺椅植椎椒椭椰椽椿楔楚楞楷楼概榆榔榜榨榴榷槐槛槽樊樟模横樱橇橙橡橱檀檄檬欠次欢欣欧欲欺款歇歉歌止正此步武歧歪歹死歼殃殆殉殊残殖殴段殷殿毁毅毋母每毒比毕毖毗毙毛毡毫毯氏民氓气氖氛氟氢氦氧氨氮氯氰水永汀汁求汇汉汐汕汗汛汝汞江池污汤汪汰汲汹汽汾沁沂沃沈沉沏沙沛沟没沤沥沦沧沪沫沮河沸油治沼沽沾沿泄泅泉泊泌法泛泞泡波泣泥注泪泰泳泵泻泼泽洁洋洒洗洛洞津洪洱洲活洼洽派流浅浆浇浊测济浑浓浙浚浦浩浪浮浴海浸涂涅消涉涌涎涕涛涝涟涡涣涤润涧涨涩涪涯液涵涸淀淄淆淋淌淑淖淘淡淤淫淬淮深淳混淹添清渊渍渐渔渗渝渠渡渣渤温渭港渴游渺湃湍湖湘湛湾湿溃溅溉源溜溢溪溯溶溺滁滇滋滑滓滔滚滞满滤滥滦滨滩滴漂漆漏漓演漠漫漱漳漾潍潘潜潞潦潭潮澄澈澎澜澡澳激濒瀑灌火灭灯灰灵灶灸灼灾灿炉炊炎炒炔炕炙炬炭炮炯炳炸点炼炽烁烂烃烈烘烙烛烟烤烦烧烩烫烬热烯烷烹烽焉焊焕焙焚焦焰然煌煎煞煤照煮煽熄熊熏熔熙熟熬燃燎燕燥爆爪爬爱爵父爷爸爹爽片版牌牙牛牟牡牢牧物牲牵特牺犀犁犊犬犯状犹狂狄狈狐狗狙狞狠狡独狭狮狰狱狸狼猎猖猛猜猩猪猫献猴猾猿獭玄率玉王玖玛玩玫环现玲玻珊珍珐珠班球琅理琉琐琢琳琴琵琶琼瑚瑞瑟瑰瑶璃瓜瓢瓣瓤瓦瓮瓶瓷甄甘甚甜生甥用甩甫甭田由甲申电男甸画畅界畏畔留畜略畦番畴畸疆疏疑疗疙疚疟疡疤疥疫疮疯疲疵疹疼疽疾病症痈痉痊痒痔痕痘痛痞痢痪痰痴痹瘁瘟瘤瘦瘩瘪瘫瘴瘸癌癣癸登白百皂的皆皇皋皑皖皮皱皿盂盅盆盈益盎盏盐监盒盔盖盗盘盛盟目盯盲直相盼盾省眉看真眠眨眩眯眶眷眺眼着睁睛睡督睦睫睬睹瞄瞅瞎瞒瞥瞧瞩瞪瞬瞳瞻矗矛矢矣知矩矫短矮石矽矾矿码砂砌砍砒研砖砚砧砰破砷砸砾础硅硒硕硝硫硬确硷硼碉碌碍碎碑碗碘碟碧碰碱碳碴碾磁磅磊磋磐磕磨磷磺礁示礼社祁祈祖祝神祟祥票祭祷祸禁禄福禹离禽禾秀私秃秆秉秋种科秒秘租秤秦秧秩积称秸移秽稀程稍税稗稚稠稳稻稼稽稿穆穗穴究穷空穿突窃窄窍窑窒窖窗窘窜窝窟窥窿立竖站竞竟章竣童竭端竹竿笆笋笑笔笛符笨第笺笼等筋筏筐筑筒答策筛筷筹签简箍箔箕算管箩箭箱篆篇篓篙篡篮篱篷簇簧簿籍米类籽粉粒粕粗粘粟粤粥粪粮粱粳粹精糊糕糖糙糜糟糠糯系紊素索紧紫累絮繁纂纠红纤约级纪纫纬纯纱纲纳纵纶纷纸纹纺纽线练组绅细织终绊绍绎经绑绒结绕绘给绚络绝绞统绢绣绥绦继绩绪续绰绳维绵绷绸综绽绿缀缄缅缆缉缎缓缔缕编缘缚缝缠缨缩缮缴缸缺罐网罕罗罚罢罩罪置署羊羌美羔羚羞羡群羹羽翁翅翌翔翘翟翠翰翱翻翼耀老考者而耍耐耕耗耘耙耪耳耶耸耻耽耿聂聊聋职联聘聚聪肃肄肆肇肉肋肌肖肘肚肛肝肠股肢肤肥肩肪肮肯育肺肾肿胀胁胃胆背胎胖胚胜胞胡胯胰胳胶胸胺能脂脆脉脊脏脐脑脓脖脚脯脱脸脾腆腊腋腐腑腔腕腥腮腰腹腺腻腾腿膀膊膏膘膛膜膝膨膳臀臂臃臆臣自臭至致臻臼舀舅舆舌舍舒舔舜舞舟航般舰舱舵舶舷船艇艘良艰色艳艺艾节芋芍芒芜芝芥芦芬芭芯花芳芹芽苇苍苏苑苔苗苛苞苟若苦苫苯英苹茁茂范茄茅茎茧茨茫茬茵茶茸茹荆草荐荒荔荚荡荣荤荧荫药荷莆莉莎莫莱莲获莹莽菇菊菌菏菜菠菩菱菲萄萌萍萎萝萤营萧萨落著葛葡董葫葬葱葵蒂蒋蒙蒜蒲蒸蓄蓉蓑蓖蓝蓟蓬蔑蔓蔗蔚蔡蔫蔬蔷蔼蔽蕉蕊蕴蕾薄薛薪薯藉藏藐藕藤藩藻蘑蘸虎虏虐虑虚虞虫虱虹虽虾蚀蚁蚂蚊蚌蚕蚜蚤蛀蛆蛇蛊蛋蛔蛙蛛蛤蛮蛰蛹蛾蜀蜂蜒蜕蜗蜘蜜蜡蝇蝉蝎蝗蝴蝶融螟螺蟹蠕蠢血衅行衍衔街衙衡衣补表衫衬衰衷袁袄袋袍袒袖袜被袭袱裁裂装裔裕裙裤裳裴裸裹褂褐褒褥褪襄襟西要覆见观规觅视览觉角解触言詹誉誊誓警譬计订讣认讥讨让讫训议讯记讲讳讶许讹论讼讽设访诀证评诅识诈诉诊诌词译试诗诚诛话诞诡询诣该详诧诫诬语误诱诲说诵请诸诺读诽课谁调谅谆谈谊谋谍谎谐谓谗谚谜谢谣谤谦谨谩谬谭谰谱谴谷豁豆豌象豢豪豫豹豺貉貌贝贞负贡财责贤败账货质贩贪贫贬购贮贯贰贱贴贵贷贸费贺贼贾贿赁赂赃资赊赋赌赎赏赐赔赖赘赚赛赞赠赡赢赣赤赦赫走赴赵赶起趁超越趋趟趣足趴趾跃跋跌跑距跟跨跪路跳践跺踊踌踏踞踢踩踪蹄蹈蹋蹦蹬蹭蹲蹿躁躇身躬躯躲躺车轧轨轩转轮软轰轴轻载轿较辅辆辈辉辊辐辑输辕辖辗辙辛辜辞辟辣辨辩辫辰辱边辽达迁迂迄迅过迈迎运近返还这进远违连迟迢迪迫迭述迷迸迹追退送适逃逆选逊透逐递途逗通逛逝逞速造逢逮逸逻逼逾遁遂遇遍遏道遗遣遥遭遮遵避邀邑邓邢那邦邪邮邯邱邵邹邻郁郊郎郑郝郡郧部郭郴郸都鄂鄙酉酋酌配酒酗酚酝酞酣酥酪酬酮酱酵酶酷酸酿醇醉醋醒醚醛采釉释里重野量金釜鉴针钉钎钒钓钙钝钞钟钠钡钢钥钦钧钨钩钮钱钳钵钻钾铀铁铂铃铅铆铜铝铡铣铬铭铰铱铲银铸铺链销锁锄锅锈锋锌锐锑锗错锚锡锣锤锥锦锨锭键锯锰锹锻镀镁镇镊镍镐镑镜镣镭镰镶长门闪闭问闯闰闲间闷闸闹闺闻闽阀阁阂阅阉阎阐阑阔阜队阮防阳阴阵阶阻阿陀附际陆陇陈陋陌降限陕陛陡院除陨险陪陵陶陷隅隆隋随隐隔隘隙障隧隶难雀雁雄雅集雇雌雍雏雕雨雪零雷雹雾需霄震霉霍霓霖霜霞露霸霹青靖静靛非靠靡面革靳靴靶鞋鞍鞘鞠鞭韦韧韩韭音韵韶页顶顷项顺须顽顾顿颁颂预颅领颇颈颊颐频颓颖颗题颜额颠颤颧风飘飞食餐饥饭饮饯饰饱饲饵饶饺饼饿馁馅馆馈馋馏馒首香马驭驮驯驰驱驳驴驶驹驻驼驾骂骄骆骇骋验骏骑骗骚骡骤骨骸髓高鬃鬼魁魂魄魏魔鱼鲁鲍鲜鲤鲸鳃鳖鳞鸟鸡鸣鸥鸦鸭鸯鸳鸵鸽鸿鹃鹅鹊鹏鹤鹰鹿麓麦麻黄黍黎黑黔默鼎鼓鼠鼻齐齿龄龋龙龚龟！％（）＋，－／：；＝？＼～";
+static void InitFontAtlas(){
+    for(int i=0;i<65536;i++) g_fontMap[i]=-1;
+    for(int i=0;g_fontChars[i];i++) g_fontMap[(int)g_fontChars[i]]=i;
+    HRSRC hr=FindResourceW(NULL,MAKEINTRESOURCEW(200),MAKEINTRESOURCEW(10));
+    if(!hr) return;
+    HGLOBAL hg=LoadResource(NULL,hr); const unsigned char* p=(const unsigned char*)(hg?LockResource(hg):NULL);
+    DWORD sz=SizeofResource(NULL,hr);
+    if(!p||sz!=1024*1024) return;
+    vector<unsigned char> rgba((size_t)1024*1024*4);
+    for(size_t i=0;i<1024*1024;i++){ unsigned char a=p[i]; rgba[i*4]=a;rgba[i*4+1]=a;rgba[i*4+2]=a;rgba[i*4+3]=a; }
+    glGenTextures(1,&g_fontTex); glBindTexture(GL_TEXTURE_2D,g_fontTex);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1024,1024,0,GL_RGBA,GL_UNSIGNED_BYTE,&rgba[0]);
+}
+static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
+    if(s.empty()||g_fontTex==0) return;
+    glUseProgram(progUI);
+    Mat4 mvp0=M4Mul(g_uiMvp,M4T(Vec3(x,y,0)));
+    glUniformMatrix4fv(U(progUI,"uMVP"),1,GL_FALSE,mvp0.m);
+    glUniform4f(U(progUI,"uColor"),col.x,col.y,col.z,a);
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,g_fontTex);
+    glUniform1i(U(progUI,"uTex"),0);
+    glDisable(GL_CULL_FACE);
+    float sc=(float)px/16.0f;
+    float cx=0, cy=0;
+    vector<float> v; vector<unsigned int> idx; unsigned int base=0;
+    for(size_t k=0;k<s.size();k++){
+        wchar_t c=s[k];
+        if(c==L'\n'){ cy+=px; cx=0; continue; }
+        int ii=g_fontMap[(int)c];
+        if(ii<0){ cx+=px; continue; }
+        float u0=(float)(ii%64)/64.0f, v0=(float)(ii/64)/64.0f;
+        float u1=u0+1.0f/64.0f, v1=v0+1.0f/64.0f;
+        float w=(c>0x7f)?16.0f*sc:8.0f*sc, h=16.0f*sc;
+        v.push_back(cx);v.push_back(cy);v.push_back(u0);v.push_back(v0);
+        v.push_back(cx+w);v.push_back(cy);v.push_back(u1);v.push_back(v0);
+        v.push_back(cx+w);v.push_back(cy+h);v.push_back(u1);v.push_back(v1);
+        v.push_back(cx);v.push_back(cy+h);v.push_back(u0);v.push_back(v1);
+        idx.push_back(base);idx.push_back(base+1);idx.push_back(base+2);
+        idx.push_back(base);idx.push_back(base+2);idx.push_back(base+3);
+        base+=4; cx+=w;
+    }
+    if(idx.empty()) return;
+    GLuint vao,vbo,ebo;
+    glGenVertexArrays(1,&vao); glBindVertexArray(vao);
+    glGenBuffers(1,&vbo); glBindBuffer(GL_ARRAY_BUFFER,vbo);
+    glBufferData(GL_ARRAY_BUFFER,v.size()*4,&v[0],GL_STREAM_DRAW);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*4,0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*4,(void*)(2*4)); glEnableVertexAttribArray(1);
+    glGenBuffers(1,&ebo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,idx.size()*4,&idx[0],GL_STREAM_DRAW);
+    glDrawElements(GL_TRIANGLES,(GLsizei)idx.size(),GL_UNSIGNED_INT,0);
+    glDeleteVertexArrays(1,&vao); glDeleteBuffers(2,&vbo);
+}
+static float TextW(const wstring&s,int px){
+    float sc=(float)px/16.0f, w=0;
+    for(size_t k=0;k<s.size();k++){
+        wchar_t c=s[k];
+        if(c==L'\n') continue;
+        if(g_fontMap[(int)c]<0){ w+=px; continue; }
+        w+=(c>0x7f)?16.0f*sc:8.0f*sc;
+    }
+    return w;
+}
+
 static GLuint ItemIcon(int id){
     switch(id){case 1:return g_iconWater;case 2:return g_iconMeat;case 3:return g_iconFlash;
     case 4:return g_iconBook;case 5:return g_iconAKM;default:return g_texWhite;}
@@ -1772,11 +1790,6 @@ static void DrawQuadTex(float x,float y,float w,float h,Vec3 col,float a,GLuint 
     glUniform1i(U(progUI,"uTex"),0);
     glDisable(GL_CULL_FACE);
     DrawMesh(meshQuad);
-}
-static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
-    if(s.empty()) return;
-    TextTex t=GetText(s,px);
-    DrawQuadTex(x,y,(float)t.w,(float)t.h,col,a,t.tex);
 }
 static void Bar(float x,float y,float w,float h,float frac,Vec3 col){
     DrawQuadTex(x-2,y-2,w+4,h+4,Vec3(0,0,0),0.5f,g_texWhite);
@@ -1867,14 +1880,12 @@ static Vec4 Vec4Mul(const Mat4&m,const Vec4&v){
 }
 static void DrawText3D(const Mat4&vp,const Vec3&p,const wstring&s){
     if(s.empty()) return;
-    TextTex t=GetText(s,16);
     Mat4 m=M4Mul(vp,M4Mul(M4T(p),M4S(Vec3(0.003f,0.003f,0.003f))));
-    // billboard-ish: ignore, just draw at anchor with UI ortho using projected pos
     // project to screen
     Vec4 clip = Vec4Mul(m,Vec4(0,0,0,1));
     if(clip.w<=0.01f) return;
     float sx=(clip.x/clip.w*0.5f+0.5f)*g_W, sy=(1.0f-(clip.y/clip.w*0.5f+0.5f))*g_H;
-    DrawQuadTex(sx-t.w/2,sy-18,(float)t.w,(float)t.h,Vec3(1,1,1),0.95f,t.tex);
+    DrawText(sx-TextW(s,16)/2.0f,sy-18,s,16,Vec3(1,1,1),0.95f);
 }
 static void DrawRemotePlayers(const Mat4&vp){
     for(auto&kv:g_peers){
@@ -2335,19 +2346,7 @@ static void RenderLoadingFrames(int n){
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
-    // embedded CJK font (resource 200) so text always works even without system fonts
-    {
-        HRSRC hr=FindResourceW(NULL,MAKEINTRESOURCEW(200),MAKEINTRESOURCEW(10));
-        if(hr){
-            HGLOBAL hg=LoadResource(NULL,hr); void* p=(hg?LockResource(hg):NULL);
-            DWORD sz=SizeofResource(NULL,hr);
-            if(p&&sz>0){
-                wstring fp=g_exeDir+L"\\_sysfont.ttf";
-                FILE* f=_wfopen(fp.c_str(),L"wb");
-                if(f){ fwrite(p,1,sz,f); fclose(f); AddFontResourceW(fp.c_str()); DeleteFileW(fp.c_str()); }
-            }
-        }
-    }
+    // optional external font (kept for compatibility; the game works without it)
     AddFontResourceW((g_exeDir+L"\\font.ttc").c_str());
     NetInit();
     srand(GetTickCount());
@@ -2358,6 +2357,7 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     // loading frames need these two ready
     { Canvas c(8,8); CanvasFillRect(c,0,0,8,8,255,255,255); g_texWhite=c.Upload(); }
     MakeBaseMeshes();
+    InitFontAtlas();
     g_loadText=L"正在初始化 OpenGL 渲染器 ..."; RenderLoadingFrames(1);
     CompilePrograms();
     g_loadText=L"正在编译着色器 (OpenGL 3.3) ..."; RenderLoadingFrames(2);
