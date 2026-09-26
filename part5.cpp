@@ -275,10 +275,13 @@ static void DrawItems(const Mat4&vp){
             Mat4 m2=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
             DrawObjRot(vp,m2,model,meshMeat,g_texMeatTex,Vec3(1.5f,1.15f,1.15f));
         } else if(it.type==3){
-            Mat4 m3=M4Mul(model,M4S(Vec3(1.5f,1.5f,1.5f)));
-            DrawObjRot(vp,m3,model,meshFlashB,g_texMetal,Vec3(1.3f,1.3f,1.45f));
-            Mat4 h3=M4Mul(M4T(Vec3(0,0.1f,0)),M4S(Vec3(1.6f,1.6f,1.6f)));
-            DrawObjRot(vp,M4Mul(model,h3),model,meshFlashH,g_texMetal,Vec3(1.5f,1.5f,1.6f));
+            // realistic flashlight on the ground (body + head + lens + tail)
+            Mat4 yz=M4RX(PI/2.0f);
+            Mat4 m3=M4Mul(model,M4T(Vec3(0,0,0.02f)));
+            DrawObjRot(vp,M4Mul(m3,M4Mul(yz,M4S(Vec3(0.026f,0.20f,0.026f)))),model,meshCyl,g_texMetal,Vec3(1.3f,1.3f,1.4f));
+            DrawObjRot(vp,M4Mul(m3,M4Mul(M4T(Vec3(0,0,0.13f)),M4Mul(yz,M4S(Vec3(0.034f,0.05f,0.034f))))),model,meshCyl,g_texMetal,Vec3(1.4f,1.4f,1.5f));
+            DrawObjRot(vp,M4Mul(m3,M4Mul(M4T(Vec3(0,0,0.158f)),M4S(Vec3(0.026f,0.026f,0.026f)))),model,meshSphere,g_texMetal,Vec3(1.5f,1.45f,1.3f));
+            DrawObjRot(vp,M4Mul(m3,M4Mul(M4T(Vec3(0,0,-0.105f)),M4S(Vec3(0.017f,0.017f,0.017f)))),model,meshSphere,g_texMetal,Vec3(1.0f,1.0f,1.05f));
         } else if(it.type==4){
             Mat4 m4=M4Mul(model,M4S(Vec3(1.6f,1.6f,1.6f)));
             DrawObjRot(vp,m4,model,meshBook,g_texBook,Vec3(1.35f,1.3f,1.0f));
