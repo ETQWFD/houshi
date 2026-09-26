@@ -24,6 +24,9 @@ static int g_ammo=30; static float g_reloadT=0;
 static float g_time=0,g_dt=0,g_fps=0,g_walkT=0,g_stepT=0;
 static float g_eatAnim=0,g_drinkAnim=0;
 static int g_menuSel=0,g_pauseSel=0;
+static int g_menuPage=0;              // 0=main,1=single,2=multi
+static bool g_multiplayer=false;      // entered via 多人游戏
+static wstring g_pendingJoin;         // IP:port to join after world generated
 static wstring g_playerName=L"幸存者",g_nameBuf,g_chatBuf;
 static vector<wstring> g_msgs,g_chatLog;
 static vector<MsgT> g_views;
