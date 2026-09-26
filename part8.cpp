@@ -152,6 +152,19 @@ static void RenderLoadingFrames(int n){
 int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
     g_hInst=hInst;
     GetExeDir();
+    // embedded CJK font (resource 200) so text always works even without system fonts
+    {
+        HRSRC hr=FindResourceW(NULL,MAKEINTRESOURCEW(200),MAKEINTRESOURCEW(10));
+        if(hr){
+            HGLOBAL hg=LoadResource(NULL,hr); void* p=(hg?LockResource(hg):NULL);
+            DWORD sz=SizeofResource(NULL,hr);
+            if(p&&sz>0){
+                wstring fp=g_exeDir+L"\\_sysfont.ttf";
+                FILE* f=_wfopen(fp.c_str(),L"wb");
+                if(f){ fwrite(p,1,sz,f); fclose(f); AddFontResourceW(fp.c_str()); DeleteFileW(fp.c_str()); }
+            }
+        }
+    }
     AddFontResourceW((g_exeDir+L"\\font.ttc").c_str());
     NetInit();
     srand(GetTickCount());
@@ -197,6 +210,15 @@ int WINAPI WinMain(HINSTANCE hInst,HINSTANCE,LPSTR,int){
             RenderLoadingFrames(2);
             UpdateChunks();
             g_gamestate=GAME_PLAY;
+            if(!g_pendingJoin.empty()){
+                wstring addr=g_pendingJoin; g_pendingJoin.clear();
+                size_t colon=addr.rfind(L':');
+                if(colon!=wstring::npos){
+                    string ip(addr.substr(0,colon).begin(),addr.substr(0,colon).end());
+                    int port=_wtoi(addr.substr(colon+1).c_str());
+                    if(port>0){ NetJoin(ip.c_str(),port); AddMsg(L"正在尝试穿透连接 "+addr+L" ..."); }
+                }
+            }
         }
         else if(g_gamestate==GAME_PLAY) UpdateGame(dt);
         else UpdateMenu(dt);
