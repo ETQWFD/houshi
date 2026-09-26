@@ -298,8 +298,17 @@ static void TryPickup(){
 }
 static void DropToWorld(int id,int cnt){
     Vec3 f(-sinf(g_yaw)*cosf(g_pitch),sinf(g_pitch),-cosf(g_yaw)*cosf(g_pitch));
-    WorldItem it; it.type=id; it.pos=g_pos+Vec3(0,1.0f,0)+f*1.2f; it.rot=g_time; it.taken=false;
+    // drop on floor in front of player, avoiding walls
+    Vec3 p=g_pos+Vec3(0,1.0f,0);
+    for(float d=0.6f;d<=3.0f;d+=0.3f){
+        Vec3 q=p+f*d;
+        int gi=(int)floorf(q.x/CELLSZ), gj=(int)floorf(q.z/CELLSZ);
+        if(!CellSolid(gi,gj)){ p=q; break; }
+    }
+    WorldItem it; it.type=id;
+    it.pos=Vec3(p.x,MaxF(FloorAt(p.x,p.z)+0.12f,0.2f),p.z); it.rot=g_time; it.taken=false;
     g_items.push_back(it);
     Sfx(L"sfx_drop.wav");
+    AddMsg(L"已丢弃 "+ItemName(id));
     (void)cnt;
 }
