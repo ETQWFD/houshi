@@ -1,6 +1,6 @@
 // ==================== input ====================
 static bool KeyDn(int v){ return (GetAsyncKeyState(v)&0x8000)!=0; }
-static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0;
+static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0,g_prevH=0;
 static bool g_prevL=false,g_prevRbtn=false;
 static bool g_mouseLock=false;
 
@@ -105,7 +105,7 @@ static bool LoadGame(){
 static void UpdateGame(float dt){
     g_time+=dt; g_dt=dt;
     // ---- mouse look (captured cursor, first/third person) ----
-    bool wantLock=(g_gamestate==GAME_PLAY&&!g_invOpen&&!g_chatOpen&&!g_dead&&g_cam!=CM_GOD);
+    bool wantLock=(g_gamestate==GAME_PLAY&&!g_invOpen&&!g_chatOpen&&!g_dead&&!g_helpOpen&&g_cam!=CM_GOD);
     if(wantLock&&!g_mouseLock){
         g_mouseLock=true; ShowCursor(FALSE);
         RECT rc; GetClientRect(g_hWnd,&rc); POINT c={rc.right/2,rc.bottom/2};
@@ -120,7 +120,7 @@ static void UpdateGame(float dt){
         int dx=p.x-c.x, dy=p.y-c.y;
         if(dx||dy){
             const float sens=0.0022f;
-            g_yaw-=dx*sens;
+            g_yaw+=dx*sens;
             g_pitch+=dy*sens;
             if(g_pitch>1.5f) g_pitch=1.5f;
             if(g_pitch<-1.5f) g_pitch=-1.5f;
@@ -136,9 +136,13 @@ static void UpdateGame(float dt){
     if(g_tracerT>0) g_tracerT-=dt;
     if(g_reloadT>0){ g_reloadT--; if(g_reloadT==1){ g_ammo=30; AddMsg(L"换弹完成"); } }
 
+    // help panel (H)
+    int nH=KeyDn('H')?1:0;
+    if(nH&&!g_prevH&&!g_chatOpen&&!g_invOpen){ g_helpOpen=!g_helpOpen; }
+    g_prevH=nH;
     // chat input
     int nT=KeyDn('T')?1:0;
-    if(nT&&!g_prevT&&g_gamestate==GAME_PLAY&&!g_invOpen){ g_chatOpen=!g_chatOpen; g_chatBuf.clear(); }
+    if(nT&&!g_prevT&&g_gamestate==GAME_PLAY&&!g_invOpen&&!g_helpOpen){ g_chatOpen=!g_chatOpen; g_chatBuf.clear(); }
     g_prevT=nT;
     if(g_chatOpen){
         if(KeyDn(VK_ESCAPE)&&!g_prevEsc){ g_chatOpen=false; }
@@ -295,6 +299,9 @@ static void StartNewGame(bool multi){
 }
 static void UpdateMenu(float dt){
     g_dt=dt;
+    int nHm=KeyDn('H')?1:0;
+    if(nHm&&!g_prevH){ g_helpOpen=!g_helpOpen; Sfx(L"sfx_click.wav"); }
+    g_prevH=nHm;
     if(KeyDn(VK_UP)&&!g_prevUp){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+2)%3; } else g_pauseSel=(g_pauseSel+2)%3; Sfx(L"sfx_click.wav"); }
     if(KeyDn(VK_DOWN)&&!g_prevDown){ if(g_gamestate==GAME_MENU){ g_menuSel=(g_menuSel+1)%3; } else g_pauseSel=(g_pauseSel+1)%3; Sfx(L"sfx_click.wav"); }
     g_prevUp=KeyDn(VK_UP)?1:0; g_prevDown=KeyDn(VK_DOWN)?1:0;
