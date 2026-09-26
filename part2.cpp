@@ -14,58 +14,7 @@ inline void CanvasLine(Canvas&c,int x0,int y0,int x1,int y1,int th,unsigned char
         if(e2>-dy){err-=dy;x0+=sx;} if(e2<dx){err+=dx;y0+=sy;} }
 }
 
-// ==================== GDI text texture (with CJK font fallback) ====================
-struct TextTex{ GLuint tex; int w,h; };
-static map<wstring,TextTex> g_textCache;
-static TextTex MakeTextTex(const wstring& s,int px){
-    TextTex t; t.w=0;t.h=0;t.tex=0; if(s.empty()) return t;
-    const wchar_t* fonts[]={L"WenQuanYi Zen Hei",L"Microsoft YaHei",L"SimHei",L"SimSun",L"NSimSun",L"KaiTi",L"Arial"};
-    HDC dc=CreateCompatibleDC(NULL);
-    int best=-1; vector<unsigned char> bestBits; int bw=0,bh=0;
-    for(int fi=0;fi<7;fi++){
-        HFONT f=CreateFontW(-px,0,0,0,FW_NORMAL,0,0,0,GB2312_CHARSET,OUT_DEFAULT_PRECIS,
-                            CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,fonts[fi]);
-        HGDIOBJ of=SelectObject(dc,f);
-        RECT rc={0,0,0,0}; DrawTextW(dc,s.c_str(),-1,&rc,DT_CALCRECT|DT_NOPREFIX);
-        int w=max(1,(int)rc.right), h=max(1,(int)rc.bottom);
-        BITMAPINFO bmi; memset(&bmi,0,sizeof(bmi));
-        bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth=w; bmi.bmiHeader.biHeight=-h;
-        bmi.bmiHeader.biPlanes=1; bmi.bmiHeader.biBitCount=32; bmi.bmiHeader.biCompression=BI_RGB;
-        void* bits=NULL; HBITMAP hbm=CreateDIBSection(dc,&bmi,DIB_RGB_COLORS,&bits,NULL,0);
-        if(bits) memset(bits,0,(size_t)w*h*4);
-        HGDIOBJ ob=SelectObject(dc,hbm);
-        SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(255,255,255));
-        RECT dr={0,0,w,h}; DrawTextW(dc,s.c_str(),-1,&dr,DT_NOPREFIX);
-        vector<unsigned char> buf((size_t)w*h*4);
-        GetDIBits(dc,hbm,0,h,&buf[0],&bmi,DIB_RGB_COLORS);
-        int cov=0; for(size_t i=2;i<buf.size();i+=4) if(buf[i]>60) cov++;
-        float ratio=(float)cov/(float)(w*h);
-        if(ratio>0.03f&&ratio<0.85f){ best=fi; bestBits=buf; bw=w; bh=h; }
-        SelectObject(dc,ob); DeleteObject(hbm); SelectObject(dc,of); DeleteObject(f);
-        if(best>=0) break;
-    }
-    DeleteDC(dc);
-    if(best<0) return t;
-    t.w=bw; t.h=bh;
-    vector<unsigned char> rgba((size_t)bw*bh*4);
-    for(int y=0;y<bh;y++)for(int x=0;x<bw;x++){
-        size_t i=((size_t)y*bw+x)*4; unsigned char a=bestBits[i+2];
-        rgba[i]=255;rgba[i+1]=255;rgba[i+2]=255;rgba[i+3]=a;
-    }
-    glGenTextures(1,&t.tex); glBindTexture(GL_TEXTURE_2D,t.tex);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,bw,bh,0,GL_RGBA,GL_UNSIGNED_BYTE,&rgba[0]);
-    return t;
-}
-static TextTex GetText(const wstring& s,int px){
-    wstring key=s+L"|"+to_wstring(px);
-    auto it=g_textCache.find(key);
-    if(it!=g_textCache.end()) return it->second;
-    TextTex t=MakeTextTex(s,px); g_textCache[key]=t; return t;
-}
+
 
 // ==================== chunks: infinite backrooms ====================
 struct GeoBuild{ vector<float> v; vector<unsigned int> idx; };
