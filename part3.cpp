@@ -63,6 +63,7 @@ static void GenSounds(){
 static void Sfx(const wchar_t* n){ PlaySoundW((g_exeDir+L"\\"+n).c_str(),NULL,SND_ASYNC|SND_FILENAME|SND_NODEFAULT); }
 
 // ==================== networking (UDP LAN + STUN hole punch) ====================
+#ifndef __EMSCRIPTEN__
 static SOCKET g_sock=INVALID_SOCKET;
 static sockaddr_in g_lanAddr;
 static bool g_broadcastOn=true;
@@ -218,6 +219,13 @@ static void NetJoin(const char* ip,int port){
     char pkt[64]; sprintf(pkt,"HSB|%S",g_playerName.c_str());
     for(int i=0;i<20;i++) NetSendTo(sa,pkt,(int)strlen(pkt)); // hole punch probes
 }
+#else
+// web: no UDP sockets; multiplayer needs a relay server (future work)
+static bool g_broadcastOn=false;
+static void NetInit(){ g_broadcastOn=false; }
+static void NetUpdate(float dt){ (void)dt; }
+static void NetJoin(const char* ip,int port){ (void)ip; (void)port; }
+#endif
 
 // ==================== messages ====================
 static void AddMsg(const wchar_t* s){ g_msgs.push_back(s); if((int)g_msgs.size()>6) g_msgs.erase(g_msgs.begin()); }
@@ -312,3 +320,4 @@ static void DropToWorld(int id,int cnt){
     AddMsg(L"已丢弃 "+ItemName(id));
     (void)cnt;
 }
+
