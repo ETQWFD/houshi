@@ -170,8 +170,8 @@ static float Fbm2(float x,float z,int oct,float lac,float gain){
 p2=p2+fbm
 
 # ---------- P4 ----------
-old_in="static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0;"
-new_in="static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0,g_prevUp=0,g_prevDown=0,g_prevEnter=0;"
+old_in="static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0,g_prevH=0;"
+new_in="static int g_prevF=0,g_prevF5=0,g_prevE=0,g_prevQ=0,g_prevT=0,g_prevEsc=0,g_prevF9=0,g_prevR=0,g_prevO=0,g_prevH=0,g_prevUp=0,g_prevDown=0,g_prevEnter=0;"
 assert old_in in p4
 p4=p4.replace(old_in,new_in)
 p4=p4.replace("static int g_prevUp=0,g_prevDown=0,g_prevEnter=0,g_prevEsc2=0;\n","")
