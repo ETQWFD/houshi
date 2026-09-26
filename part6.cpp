@@ -9,15 +9,15 @@ static void InitFontAtlas(){
     if(!hr) return;
     HGLOBAL hg=LoadResource(NULL,hr); const unsigned char* p=(const unsigned char*)(hg?LockResource(hg):NULL);
     DWORD sz=SizeofResource(NULL,hr);
-    if(!p||sz!=1024*1024) return;
-    vector<unsigned char> rgba((size_t)1024*1024*4);
-    for(size_t i=0;i<1024*1024;i++){ unsigned char a=p[i]; rgba[i*4]=a;rgba[i*4+1]=a;rgba[i*4+2]=a;rgba[i*4+3]=a; }
+    if(!p||sz!=2048*2048) return;
+    vector<unsigned char> rgba((size_t)2048*2048*4);
+    for(size_t i=0;i<(size_t)2048*2048;i++){ unsigned char a=p[i]; rgba[i*4]=a;rgba[i*4+1]=a;rgba[i*4+2]=a;rgba[i*4+3]=a; }
     glGenTextures(1,&g_fontTex); glBindTexture(GL_TEXTURE_2D,g_fontTex);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1024,1024,0,GL_RGBA,GL_UNSIGNED_BYTE,&rgba[0]);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,2048,2048,0,GL_RGBA,GL_UNSIGNED_BYTE,&rgba[0]);
 }
 static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
     if(s.empty()||g_fontTex==0) return;
@@ -28,7 +28,7 @@ static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,g_fontTex);
     glUniform1i(U(progUI,"uTex"),0);
     glDisable(GL_CULL_FACE);
-    float sc=(float)px/16.0f;
+    float sc=(float)px/32.0f;
     float cx=0, cy=0;
     vector<float> v; vector<unsigned int> idx; unsigned int base=0;
     for(size_t k=0;k<s.size();k++){
@@ -38,7 +38,7 @@ static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
         if(ii<0){ cx+=px; continue; }
         float u0=(float)(ii%64)/64.0f, v0=(float)(ii/64)/64.0f;
         float u1=u0+1.0f/64.0f, v1=v0+1.0f/64.0f;
-        float w=(c>0x7f)?16.0f*sc:8.0f*sc, h=16.0f*sc;
+        float w=(c>0x7f)?32.0f*sc:16.0f*sc, h=32.0f*sc;
         v.push_back(cx);v.push_back(cy);v.push_back(u0);v.push_back(v0);
         v.push_back(cx+w);v.push_back(cy);v.push_back(u1);v.push_back(v0);
         v.push_back(cx+w);v.push_back(cy+h);v.push_back(u1);v.push_back(v1);
@@ -60,12 +60,12 @@ static void DrawText(float x,float y,const wstring&s,int px,Vec3 col,float a){
     glDeleteVertexArrays(1,&vao); glDeleteBuffers(2,&vbo);
 }
 static float TextW(const wstring&s,int px){
-    float sc=(float)px/16.0f, w=0;
+    float sc=(float)px/32.0f, w=0;
     for(size_t k=0;k<s.size();k++){
         wchar_t c=s[k];
         if(c==L'\n') continue;
         if(g_fontMap[(int)c]<0){ w+=px; continue; }
-        w+=(c>0x7f)?16.0f*sc:8.0f*sc;
+        w+=(c>0x7f)?32.0f*sc:16.0f*sc;
     }
     return w;
 }
@@ -137,37 +137,106 @@ static void DrawLeg(const Mat4&vp,const Mat4&hip,float swing){
     PartMesh(vp,Limb(hip,Vec3(0,-0.64f,0.01f),0.063f,0.48f),meshCyl,g_texPants,CLR_PANTS);
     Part(vp,M4Mul(hip,M4Mul(M4T(Vec3(0,-0.91f,0.11f)),M4S(Vec3(0.105f,0.08f,0.27f)))),meshBox,g_texPants,CLR_DARK);
 }
-static void DrawHumanoid(const Mat4&vp,const Vec3&root,float yaw,float pitch,bool isLocal,float ph){
-    // root at feet; realistic body ~1.9m
-    Mat4 base=M4Mul(M4T(root),M4RY(yaw));
-    float sw=sinf(ph)*0.7f, swA=sinf(ph)*0.55f;
-    float bend=pitch*0.5f;
-    // pelvis, waist, chest (shoulders wider than waist)
-    Part(vp,PartM(base,Vec3(0,1.00f,0),M4Id(),Vec3(0.30f,0.15f,0.20f)),meshBox,g_texPants,CLR_PANTS);
-    Part(vp,PartM(base,Vec3(0,1.16f,0),M4RX(bend*0.2f),Vec3(0.30f,0.11f,0.18f)),meshBox,g_texShirt,CLR_SHIRT);
-    Part(vp,PartM(base,Vec3(0,1.40f,0),M4RX(bend*0.3f),Vec3(0.52f,0.46f,0.28f)),meshBox,g_texShirt,CLR_SHIRT);
-    // rounded shoulders
-    PartMesh(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
-    PartMesh(vp,PartM(base,Vec3(0.28f,1.52f,0),M4Id(),Vec3(0.075f,0.075f,0.075f)),meshSphere,g_texShirt,CLR_SHIRT);
-    // head: ellipsoid skull + hair cap + eyes
-    Mat4 headM=PartM(base,Vec3(0,1.82f,0),M4RX(bend),Vec3(1,1,1));
-    DrawObjRot(vp,M4Mul(headM,M4S(Vec3(0.105f,0.135f,0.115f))),headM,meshSphere,g_texSkin,CLR_SKIN);
-    DrawObjRot(vp,M4Mul(PartM(base,Vec3(0,1.91f,0),M4RX(bend),Vec3(1,1,1)),M4S(Vec3(0.115f,0.06f,0.125f))),headM,meshSphere,g_texPants,CLR_DARK);
-    PartMesh(vp,PartM(base,Vec3(-0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
-    PartMesh(vp,PartM(base,Vec3(0.045f,1.84f,0.095f),M4Id(),Vec3(0.022f,0.016f,0.012f)),meshSphere,g_texPants,CLR_DARK);
-    // legs
-    DrawLeg(vp,PartM(base,Vec3(-0.11f,1.02f,0),M4RX(sw),Vec3(1,1,1)),sw);
-    DrawLeg(vp,PartM(base,Vec3(0.11f,1.02f,0),M4RX(-sw),Vec3(1,1,1)),-sw);
-    // arms
-    DrawArm(vp,PartM(base,Vec3(-0.28f,1.52f,0),M4RX(swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,-1,g_texShirt);
-    DrawArm(vp,PartM(base,Vec3(0.28f,1.52f,0),M4RX(-swA*0.6f+bend*0.4f),Vec3(1,1,1)),swA,1,g_texShirt);
+// ==================== skeletal humanoid (skinned, PUBG-style) ====================
+struct SBone{ int parent; Vec3 off; float r,len; int texv; };
+// texv: 0=head 1=shirt 2=pants 3=skin 4=shoes  (row in g_texBody)
+static const SBone SKB[21]={
+    {0, Vec3(0,0.88f,0),       0.0f,  0.0f,  2}, // 0 pelvis root (no segment)
+    {0, Vec3(0,0.04f,0),       0.175f,0.20f, 2}, // 1 pelvis/spine base
+    {1, Vec3(0,0.21f,0),       0.190f,0.28f, 1}, // 2 chest
+    {2, Vec3(0,0.31f,0),       0.095f,0.11f, 3}, // 3 neck
+    {3, Vec3(0,0.15f,0),       0.120f,0.26f, 0}, // 4 head
+    {2, Vec3(-0.315f,0.29f,0), 0.088f,0.10f, 1}, // 5 shoulder L
+    {5, Vec3(0,-0.16f,0),      0.056f,0.32f, 1}, // 6 upper arm L
+    {6, Vec3(0,-0.31f,0),      0.046f,0.28f, 3}, // 7 forearm L
+    {7, Vec3(0,-0.27f,0),      0.056f,0.11f, 3}, // 8 hand L
+    {2, Vec3(0.315f,0.29f,0),  0.088f,0.10f, 1}, // 9 shoulder R
+    {9, Vec3(0,-0.16f,0),      0.056f,0.32f, 1}, // 10 upper arm R
+    {10,Vec3(0,-0.31f,0),      0.046f,0.28f, 3}, // 11 forearm R
+    {11,Vec3(0,-0.27f,0),      0.056f,0.11f, 3}, // 12 hand R
+    {0, Vec3(-0.115f,0,0),     0.092f,0.12f, 2}, // 13 hip L
+    {13,Vec3(0,-0.16f,0),      0.078f,0.38f, 2}, // 14 thigh L
+    {14,Vec3(0,-0.36f,0),      0.058f,0.34f, 2}, // 15 shin L
+    {15,Vec3(0,-0.32f,0),      0.052f,0.09f, 4}, // 16 foot L
+    {0, Vec3(0.115f,0,0),      0.092f,0.12f, 2}, // 17 hip R
+    {17,Vec3(0,-0.16f,0),      0.078f,0.38f, 2}, // 18 thigh R
+    {18,Vec3(0,-0.36f,0),      0.058f,0.34f, 2}, // 19 shin R
+    {19,Vec3(0,-0.32f,0),      0.052f,0.09f, 4}, // 20 foot R
+};
+static Mat4 g_bm[21];
+static void DrawSeg(const Mat4&vp,int i){
+    const SBone&b=SKB[i];
+    if(b.len<=0.001f) return;
+    Vec3 tint(0.92f,0.92f,0.94f);
+    PartMesh(vp,M4Mul(g_bm[i],M4S(Vec3(b.r,b.len,b.r))),meshCylRow[b.texv],g_texBody,tint);
+    PartMesh(vp,M4Mul(g_bm[i],M4Mul(M4T(Vec3(0,b.len*0.5f,0)),M4S(Vec3(b.r,b.r,b.r)))),meshSphere,g_texBody,tint);
+    PartMesh(vp,M4Mul(g_bm[i],M4Mul(M4T(Vec3(0,-b.len*0.5f,0)),M4S(Vec3(b.r,b.r,b.r)))),meshSphere,g_texBody,tint);
 }
-static void DrawRemotePlayers(const Mat4&vp){
+static void DrawHandBone(const Mat4&vp,int i,int dir){
+    // palm
+    Mat4 handM=g_bm[i];
+    PartMesh(vp,M4Mul(handM,M4S(Vec3(0.062f,0.075f,0.07f))),meshBox,g_texSkin,Vec3(1.0f,0.94f,0.88f));
+    DrawFingers(vp,M4Mul(handM,M4T(Vec3(0,0.01f,0.035f))),dir);
+}
+static void DrawFootBone(const Mat4&vp,int i){
+    PartMesh(vp,M4Mul(g_bm[i],M4Mul(M4T(Vec3(0,-0.05f,0.11f)),M4S(Vec3(0.115f,0.07f,0.26f)))),meshBox,g_texPants,Vec3(0.28f,0.28f,0.32f));
+}
+static void DrawHeadBone(const Mat4&vp,int i){
+    Mat4 h=g_bm[i];
+    PartMesh(vp,M4Mul(h,M4S(Vec3(0.105f,0.135f,0.115f))),meshSphere,g_texSkin,Vec3(0.95f,0.90f,0.86f));
+    PartMesh(vp,M4Mul(h,M4Mul(M4T(Vec3(0,0.10f,0)),M4S(Vec3(0.118f,0.055f,0.128f)))),meshSphere,g_texPants,Vec3(0.12f,0.12f,0.14f));
+    PartMesh(vp,M4Mul(h,M4Mul(M4T(Vec3(-0.043f,0.02f,0.098f)),M4S(Vec3(0.022f,0.014f,0.012f)))),meshSphere,g_texPants,Vec3(0.08f,0.08f,0.10f));
+    PartMesh(vp,M4Mul(h,M4Mul(M4T(Vec3(0.043f,0.02f,0.098f)),M4S(Vec3(0.022f,0.014f,0.012f)))),meshSphere,g_texPants,Vec3(0.08f,0.08f,0.10f));
+}
+static void DrawSkeletonHuman(const Mat4&vp,const Vec3&root,float yaw,float pitch,float ph,bool aim){
+    Mat4 base=M4Mul(M4T(root),M4RY(yaw));
+    Mat4 rot[21];
+    for(int i=0;i<21;i++) rot[i]=M4Id();
+    float sw=sinf(ph)*0.55f;
+    rot[14]=M4RX(sw); rot[18]=M4RX(-sw);
+    rot[15]=M4RX(-MaxF(sinf(ph-0.4f),0.0f)*0.85f);
+    rot[19]=M4RX(-MaxF(sinf(ph+0.4f),0.0f)*0.85f);
+    rot[6]=M4RX(-sw*0.75f); rot[10]=M4RX(sw*0.75f);
+    rot[7]=M4RX(-MaxF(sinf(ph-0.4f),0.0f)*0.5f);
+    rot[11]=M4RX(-MaxF(sinf(ph+0.4f),0.0f)*0.5f);
+    rot[2]=M4RX(sinf(g_time*1.3f)*0.025f + pitch*0.25f);
+    rot[5]=M4RX(0.08f); rot[9]=M4RX(-0.08f);
+    if(aim){ // hold rifle stance
+        rot[9]=M4RX(-1.25f); rot[10]=M4RX(-1.15f); rot[11]=M4RX(-0.65f);
+        rot[5]=M4RX(-1.05f); rot[6]=M4RX(-0.35f); rot[7]=M4RX(-0.45f);
+        rot[14]=M4RX(0.12f); rot[18]=M4RX(-0.12f);
+        rot[15]=M4RX(-0.16f); rot[19]=M4RX(-0.16f);
+    }
+    // forward kinematics
+    g_bm[0]=M4Mul(base,M4T(SKB[0].off));
+    for(int i=1;i<21;i++){
+        const SBone&b=SKB[i];
+        g_bm[i]=M4Mul(g_bm[b.parent],M4Mul(M4T(b.off),rot[i]));
+    }
+    // legs first (behind), torso, then arms/head (front)
+    DrawSeg(vp,16); DrawSeg(vp,20);
+    DrawFootBone(vp,16); DrawFootBone(vp,20);
+    DrawSeg(vp,13); DrawSeg(vp,17);
+    DrawSeg(vp,15); DrawSeg(vp,19);
+    DrawSeg(vp,14); DrawSeg(vp,18);
+    DrawSeg(vp,1); DrawSeg(vp,2); DrawSeg(vp,3);
+    DrawSeg(vp,5); DrawSeg(vp,6); DrawSeg(vp,7);
+    DrawSeg(vp,9); DrawSeg(vp,10); DrawSeg(vp,11);
+    DrawSeg(vp,8); DrawSeg(vp,12);
+    DrawHandBone(vp,8,-1); DrawHandBone(vp,12,1);
+    DrawHeadBone(vp,4);
+    if(aim){ DrawAKM(vp,M4Mul(g_bm[12],M4T(Vec3(0,0,0.10f)))); }
+}
+static void DrawHumanoid(const Mat4&vp,const Vec3&root,float yaw,float pitch,bool isLocal,float ph){
+    bool aim=false;
+    if(isLocal){ int hid=(g_hotbarSel<(int)g_inv.size())?g_inv[g_hotbarSel].id:0; aim=(hid==5); }
+    else aim=true;
+    DrawSkeletonHuman(vp,root,yaw,pitch,ph,aim);
+}static void DrawRemotePlayers(const Mat4&vp){
     for(auto&kv:g_peers){
         RemotePlayer&rp=kv.second;
         if(g_time-rp.last>5.0f) continue;
-        float ph=g_time*3.0f;
-        DrawHumanoid(vp,rp.pos,rp.yaw,rp.pitch,false,sinf(ph)*0.0f);
+        DrawHumanoid(vp,rp.pos,rp.yaw,rp.pitch,false,g_time*2.4f);
         // name label
         wstring nm(rp.name,rp.name+strlen(rp.name));
         DrawText3D(vp,rp.pos+Vec3(0,2.05f,0),nm);
@@ -212,9 +281,14 @@ static void DrawHandsFP(const Mat4&vp){
     if(heldId==5){
         DrawAKM(vp,hold);
     } else if(heldId==3){
-        Mat4 fl=M4Mul(hold,M4S(Vec3(1,1,1)));
-        DrawObjRot(vp,M4Mul(fl,M4S(Vec3(1.2f,1.2f,1.2f))),hold,meshFlashB,g_texMetal,Vec3(0.8f,0.8f,0.85f));
-        DrawObjRot(vp,M4Mul(M4Mul(fl,M4T(Vec3(0,0.05f,0))),M4S(Vec3(1.4f,1.4f,1.4f))),hold,meshFlashH,g_texMetal,Vec3(0.9f,0.9f,0.95f));
+        // realistic flashlight: body + head cone + lens + tail button + side switch
+        Mat4 fl=M4Mul(hold,M4T(Vec3(0,0,0.02f)));
+        Mat4 yz=M4RX(PI/2.0f);
+        PartMesh(vp,M4Mul(fl,M4Mul(yz,M4S(Vec3(0.026f,0.20f,0.026f)))),meshCyl,g_texMetal,Vec3(0.85f,0.85f,0.9f));
+        PartMesh(vp,M4Mul(fl,M4Mul(M4T(Vec3(0,0,0.13f)),M4Mul(yz,M4S(Vec3(0.034f,0.05f,0.034f))))),meshCyl,g_texMetal,Vec3(0.95f,0.95f,1.0f));
+        PartMesh(vp,M4Mul(fl,M4Mul(M4T(Vec3(0,0,0.158f)),M4S(Vec3(0.026f,0.026f,0.026f)))),meshSphere,g_texMetal,Vec3(1.0f,0.98f,0.9f));
+        PartMesh(vp,M4Mul(fl,M4Mul(M4T(Vec3(0,0,-0.105f)),M4S(Vec3(0.017f,0.017f,0.017f)))),meshSphere,g_texMetal,Vec3(0.7f,0.7f,0.75f));
+        PartMesh(vp,M4Mul(fl,M4Mul(M4T(Vec3(0.026f,0.02f,0.02f)),M4S(Vec3(0.012f,0.012f,0.022f)))),meshBox,g_texMetal,Vec3(0.8f,0.8f,0.85f));
     } else if(heldId==1){
         DrawObjRot(vp,M4Mul(hold,M4S(Vec3(1,1,1))),hold,meshBottle,g_texBottle,Vec3(0.6f,0.75f,0.95f));
         DrawObjRot(vp,M4Mul(M4Mul(hold,M4T(Vec3(0,0.15f,0))),M4S(Vec3(1,1,1))),hold,meshCap,g_texBottle,Vec3(0.7f,0.85f,1.0f));
