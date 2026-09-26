@@ -7,10 +7,17 @@
 //        程序化音效 / 480FPS / 全程存档
 //  构建: MinGW-w64: -static -lopengl32 -lgdi32 -luser32 -lwinmm -lws2_32
 // ============================================================
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h>
+#include <SDL2/SDL.h>
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+#else
 #include <winsock2.h>
 #include <windows.h>
 #include <GL/gl.h>
 #include <GL/glext.h>
+#endif
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -363,10 +370,34 @@ static void BuildMesh2D(Mesh&m,const vector<float>&v,const vector<unsigned int>&
 }
 
 static Mesh meshBox,meshCyl,meshSphere,meshBottle,meshCap,meshMeat,meshBook,meshFlashB,meshFlashH,meshAKM;
+static Mesh meshCylRow[5]; // body texture row-mapped cylinders
+static Mesh MakeCylRow(float r,float h,int seg,float v0,float v1){
+    vector<float> v; vector<unsigned int> idx;
+    auto push=[&](float x,float y,float z,float nx,float ny,float nz,float u,float vv){ v.push_back(x);v.push_back(y);v.push_back(z);v.push_back(nx);v.push_back(ny);v.push_back(nz);v.push_back(u);v.push_back(vv); };
+    int n=seg;
+    for(int i=0;i<n;i++){
+        float a0=(float)i/n*2*PI, a1=(float)(i+1)/n*2*PI;
+        float c0=cosf(a0),s0=sinf(a0),c1=cosf(a1),s1=sinf(a1);
+        push(0,h,0,0,1,0,0.5f,v1); push(r*c0,h,r*s0,0,1,0,c0*0.5f+0.5f,v1); push(r*c1,h,r*s1,0,1,0,c1*0.5f+0.5f,v1);
+        push(0,0,0,0,-1,0,0.5f,v0); push(r*c1,0,r*s1,0,-1,0,c1*0.5f+0.5f,v0); push(r*c0,0,r*s0,0,-1,0,c0*0.5f+0.5f,v0);
+        push(r*c0,h,r*s0,c0,0,s0,(float)i/n,v1); push(r*c1,h,r*s1,c1,0,s1,(float)(i+1)/n,v1);
+        push(r*c1,0,r*s1,c1,0,s1,(float)(i+1)/n,v0); push(r*c0,h,r*s0,c0,0,s0,(float)i/n,v1);
+        push(r*c0,0,r*s0,c0,0,s0,(float)i/n,v0); push(r*c1,0,r*s1,c1,0,s1,(float)(i+1)/n,v0);
+    }
+    for(int i=0;i<n;i++){ unsigned int b=i*12;
+        idx.push_back(b);idx.push_back(b+1);idx.push_back(b+2);
+        idx.push_back(b+3);idx.push_back(b+4);idx.push_back(b+5);
+        idx.push_back(b+6);idx.push_back(b+7);idx.push_back(b+8);
+        idx.push_back(b+9);idx.push_back(b+10);idx.push_back(b+11);
+    }
+    Mesh m; BuildMesh(m,v,idx,8); return m;
+}
 static void MakeBaseMeshes(){
     meshBox=MakeBox(0.5f,0.5f,0.5f); // half-size so scale=full size
     meshCyl=MakeCyl(0.5f,1.0f,14);
     meshSphere=MakeSphere(0.5f,14,8);
+    { const float ROWS[5][2]={{0.02f,0.22f},{0.24f,0.55f},{0.55f,0.80f},{0.80f,0.94f},{0.94f,1.00f}};
+      for(int t=0;t<5;t++) meshCylRow[t]=MakeCylRow(0.5f,1.0f,14,ROWS[t][0],ROWS[t][1]); }
     meshQuad=M0();
     { float v[4*5]={0,0,0, 0,0, 1,0,0, 1,0, 1,1,0, 1,1, 0,1,0, 0,1};
       unsigned int idx[6]={0,1,2,0,2,3};
@@ -396,7 +427,7 @@ struct Canvas { int w,h; vector<unsigned char> px;
         return t; }
 };
 static GLuint g_texWall,g_texFloor,g_texCeil,g_texPanel,g_texWhite;
-static GLuint g_texSkin,g_texShirt,g_texPants,g_texWood,g_texMetal,g_texMeatTex,g_texBook,g_texBottle;
+static GLuint g_texSkin,g_texShirt,g_texPants,g_texWood,g_texMetal,g_texMeatTex,g_texBook,g_texBottle,g_texBody;
 static GLuint g_iconWater,g_iconMeat,g_iconFlash,g_iconBook,g_iconAKM;
 static void MakeAllTextures(){
     { Canvas c(256,256); // 黄色墙纸: 竖条纹 + 污渍 + 底边
@@ -452,6 +483,24 @@ static void MakeAllTextures(){
         c.Set(x,y,92,104,128); } g_texShirt=c.Upload(); }
     { Canvas c(64,64); for(int y=0;y<64;y++)for(int x=0;x<64;x++){
         c.Set(x,y,66,58,52); } g_texPants=c.Upload(); }
+    { Canvas c(512,256); // body skin: rows = head/shirt/pants/skin/shoes
+        for(int y=0;y<256;y++)for(int x=0;x<512;x++){
+            float fy=(float)y/256.0f, n=Fbm2(x*0.06f,y*0.08f,4,2.0f,0.5f);
+            int r=0,g=0,b=0;
+            if(fy<0.22f){ r=218;g=192;b=168; }                       // head base (skin)
+            else if(fy<0.55f){ r=(int)(72+n*30);g=(int)(76+n*28);b=(int)(84+n*30); } // tactical shirt
+            else if(fy<0.80f){ r=(int)(128+n*36);g=(int)(110+n*30);b=(int)(76+n*24); } // khaki pants
+            else if(fy<0.94f){ r=(int)(210+n*22);g=(int)(178+n*20);b=(int)(148+n*18); } // arms/hands skin
+            else { r=(int)(38+n*16);g=(int)(36+n*14);b=(int)(34+n*12); }               // shoes
+            c.Set(x,y,(unsigned char)ClampF(r,0,255),(unsigned char)ClampF(g,0,255),(unsigned char)ClampF(b,0,255));
+        }
+        // shirt details: chest strap + pockets
+        for(int y=72;y<140;y++)for(int x=0;x<512;x++){
+            if((x%64)<3||(x%96)<2){ c.Set(x,y,40,44,52); }
+        }
+        for(int y=120;y<128;y++)for(int x=64;x<180;x++) c.Set(x,y,46,50,58);
+        for(int y=120;y<128;y++)for(int x=240;x<356;x++) c.Set(x,y,46,50,58);
+        g_texBody=c.Upload(); }
     { Canvas c(128,128); for(int y=0;y<128;y++)for(int x=0;x<128;x++){
         float n=Fbm2(x*0.08f,y*0.08f,4,2.0f,0.5f);
         c.Set(x,y,(unsigned char)(140+n*50),(unsigned char)(104+n*40),(unsigned char)(62+n*30)); }
